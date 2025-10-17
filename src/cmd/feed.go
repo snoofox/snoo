@@ -130,6 +130,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewing = true
 				m.loadingComments = true
 				m.comments = nil
+				m.viewport.SetContent(m.renderPostContent())
+				m.viewport.GotoTop()
 				return m, m.loadCommentsCmd()
 			}
 		}

@@ -15,6 +15,14 @@ import (
 
 const BASE_URL = "https://www.reddit.com"
 
+func Purge(ctx context.Context) {
+	database := db.FromContext(ctx)
+	oneWeekAgo := time.Now().Add(-7 * 24 * time.Hour)
+
+	database.Where("created_at < ?", oneWeekAgo).Delete(&db.Post{})
+	database.Where("created_at < ?", oneWeekAgo).Delete(&db.Comment{})
+}
+
 func FetchSubreddit(name string) (Subreddit, error) {
 	url := fmt.Sprintf("%s/r/%s/about.json", BASE_URL, name)
 
@@ -370,40 +378,6 @@ func buildCommentTree(database *gorm.DB, dbComment db.Comment) Comment {
 	}
 
 	return comment
-}
-
-func CleanupOldData(ctx context.Context) {
-	database := db.FromContext(ctx)
-
-	cutoffTime := time.Now().Add(-24 * time.Hour)
-
-	database.Where("updated_at < ?", cutoffTime).Delete(&db.Comment{})
-
-	var oldPosts []db.Post
-	database.Where("updated_at < ?", cutoffTime).Find(&oldPosts)
-
-	for _, post := range oldPosts {
-		database.Where("post_id = ?", post.ID).Delete(&db.Comment{})
-	}
-
-	database.Where("updated_at < ?", cutoffTime).Delete(&db.Post{})
-
-	fmt.Printf("Cleaned up data older than %s\n", cutoffTime.Format("2006-01-02 15:04:05"))
-}
-
-func StartCleanupTicker(ctx context.Context) {
-	ticker := time.NewTicker(6 * time.Hour)
-	go func() {
-		for {
-			select {
-			case <-ticker.C:
-				CleanupOldData(ctx)
-			case <-ctx.Done():
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 }
 
 func parseComment(data map[string]any, depth int) Comment {
