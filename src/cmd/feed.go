@@ -16,32 +16,39 @@ import (
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FAFAFA"))
+			Foreground(lipgloss.Color("#FF6B9D"))
 
 	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00D7FF")).
-			Background(lipgloss.Color("#1C1C1C")).
+			Foreground(lipgloss.Color("#FAFAFA")).
 			Bold(true)
 
 	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF00FF")).
+			Foreground(lipgloss.Color("#F472B6")).
 			Bold(true)
 
 	subredditStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00D7FF"))
+			Foreground(lipgloss.Color("#7C9CBF"))
 
 	scoreStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#00FF87"))
+			Foreground(lipgloss.Color("#86EFAC"))
 
 	nsfwStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FF5F87")).
-			Bold(true)
+			Foreground(lipgloss.Color("#1A1A1A")).
+			Background(lipgloss.Color("#F87171")).
+			Bold(true).
+			Padding(0, 1)
 
 	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6C6C6C"))
+			Foreground(lipgloss.Color("#6B7280"))
 
 	urlStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#5F87FF"))
+			Foreground(lipgloss.Color("#818CF8"))
+
+	commentsStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#D4A574"))
+
+	separatorStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#3F3F46"))
 )
 
 type commentsLoadedMsg struct {
@@ -153,15 +160,21 @@ func (m model) View() string {
 }
 
 func (m *model) ensureCursorVisible() {
-	lineHeight := 2
-	cursorLine := m.cursor * lineHeight
+	headerLines := 4
+	linesPerPost := 3
+	cursorLine := headerLines + (m.cursor * linesPerPost)
+
 	viewportTop := m.listViewport.YOffset
 	viewportBottom := viewportTop + m.listViewport.Height
 
 	if cursorLine < viewportTop {
 		m.listViewport.SetYOffset(cursorLine)
-	} else if cursorLine >= viewportBottom {
-		m.listViewport.SetYOffset(cursorLine - m.listViewport.Height + lineHeight)
+	} else if cursorLine+linesPerPost > viewportBottom {
+		newOffset := cursorLine - m.listViewport.Height + linesPerPost
+		if newOffset < 0 {
+			newOffset = 0
+		}
+		m.listViewport.SetYOffset(newOffset)
 	}
 }
 
@@ -169,46 +182,52 @@ func (m model) viewList() string {
 	if !m.ready {
 		return "Loading..."
 	}
-	return m.listViewport.View() + "\n" + dimStyle.Render("j/k or ↑/↓: navigate • enter: read • q: quit")
+	helpText := dimStyle.Render("  ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA")).Render("j/k") +
+		dimStyle.Render(" navigate  ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("enter") +
+		dimStyle.Render(" read  ") +
+		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("q") +
+		dimStyle.Render(" quit")
+	return m.listViewport.View() + "\n" + helpText
 }
 
 func (m model) renderListContent() string {
-	s := titleStyle.Render("󰑍 Your Feed") + "\n"
-	s += dimStyle.Render(fmt.Sprintf("%d posts", len(m.posts))) + "\n\n"
+	s := "\n"
+	s += titleStyle.Render("  󰑍  Your Feed") + "\n"
+	s += dimStyle.Render(fmt.Sprintf("  %d posts", len(m.posts))) + "\n\n"
 
 	for i, post := range m.posts {
-		titleText := truncate(post.Title, 90)
-		nsfw := ""
-		if post.NSFW {
-			nsfw = nsfwStyle.Render("[NSFW] ")
-		}
+		titleText := truncate(post.Title, 85)
 
 		if m.cursor == i {
-			cursor := cursorStyle.Render("▶ ")
+			cursor := cursorStyle.Render("● ")
+
+			nsfw := ""
+			if post.NSFW {
+				nsfw = nsfwStyle.Render(" NSFW ") + " "
+			}
+
 			sub := subredditStyle.Render(post.Subreddit)
-			score := scoreStyle.Render(fmt.Sprintf("↑%d", post.Score))
-			comments := dimStyle.Render(fmt.Sprintf("(%d)", post.NumComments))
+			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
+			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
+			sep := separatorStyle.Render("•")
 
-			s += fmt.Sprintf("%s%s%s %s %s %s\n",
-				cursor,
-				nsfw,
-				selectedStyle.Render(titleText),
-				sub,
-				score,
-				comments,
-			)
+			s += " " + cursor + selectedStyle.Render(titleText) + "\n"
+			s += "   " + nsfw + sub + " " + sep + " " + score + " " + sep + " " + comments + "\n\n"
 		} else {
-			sub := dimStyle.Render(post.Subreddit)
-			score := dimStyle.Render(fmt.Sprintf("↑%d", post.Score))
-			comments := dimStyle.Render(fmt.Sprintf("(%d)", post.NumComments))
+			nsfw := ""
+			if post.NSFW {
+				nsfw = nsfwStyle.Render(" NSFW ") + " "
+			}
 
-			s += fmt.Sprintf("  %s%s %s %s %s\n",
-				nsfw,
-				titleText,
-				sub,
-				score,
-				comments,
-			)
+			sub := subredditStyle.Render(post.Subreddit)
+			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
+			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
+			sep := separatorStyle.Render("•")
+
+			s += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB")).Render(titleText) + "\n"
+			s += "   " + nsfw + sub + " " + sep + " " + score + " " + sep + " " + comments + "\n\n"
 		}
 	}
 
