@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"snoo/src/db"
 	"snoo/src/reddit"
 	"sort"
 	"strings"
@@ -14,41 +15,16 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FF6B9D"))
-
-	selectedStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Bold(true)
-
-	cursorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#F472B6")).
-			Bold(true)
-
-	subredditStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7C9CBF"))
-
-	scoreStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#86EFAC"))
-
-	nsfwStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1A1A1A")).
-			Background(lipgloss.Color("#F87171")).
-			Bold(true).
-			Padding(0, 1)
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#6B7280"))
-
-	urlStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#818CF8"))
-
-	commentsStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#D4A574"))
-
-	separatorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#3F3F46"))
+	titleStyle     lipgloss.Style
+	selectedStyle  lipgloss.Style
+	cursorStyle    lipgloss.Style
+	subredditStyle lipgloss.Style
+	scoreStyle     lipgloss.Style
+	nsfwStyle      lipgloss.Style
+	dimStyle       lipgloss.Style
+	urlStyle       lipgloss.Style
+	commentsStyle  lipgloss.Style
+	separatorStyle lipgloss.Style
 )
 
 type commentsLoadedMsg struct {
@@ -182,12 +158,13 @@ func (m model) viewList() string {
 	if !m.ready {
 		return "Loading..."
 	}
+	theme := GetCurrentTheme()
 	helpText := dimStyle.Render("  ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#60A5FA")).Render("j/k") +
+		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k") +
 		dimStyle.Render(" navigate  ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#34D399")).Render("enter") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("enter") +
 		dimStyle.Render(" read  ") +
-		lipgloss.NewStyle().Foreground(lipgloss.Color("#F87171")).Render("q") +
+		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return m.listViewport.View() + "\n" + helpText
 }
@@ -333,6 +310,9 @@ var feedCmd = &cobra.Command{
 	Use:   "feed",
 	Short: "List hot posts",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Load saved theme
+		loadSavedTheme(cmd.Context())
+
 		posts := reddit.FetchFeeds(cmd.Context())
 
 		if len(posts) == 0 {
@@ -401,6 +381,15 @@ func wrapText(text string, width int) string {
 	return result.String()
 }
 
+func loadSavedTheme(ctx context.Context) {
+	if gormDB := db.FromContext(ctx); gormDB != nil {
+		if themeName, err := db.GetSetting(gormDB, "theme"); err == nil && themeName != "" {
+			SetTheme(themeName)
+		}
+	}
+}
+
 func init() {
+	applyTheme()
 	rootCmd.AddCommand(feedCmd)
 }
