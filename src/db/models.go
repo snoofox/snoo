@@ -51,3 +51,9 @@ type Comment struct {
 	CreatedUTC float64
 	Depth      int
 }
+
+type Setting struct {
+	gorm.Model
+	Key   string `gorm:"uniqueIndex;size:64"`
+	Value string `gorm:"size:256"`
+}
