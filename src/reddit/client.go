@@ -107,7 +107,6 @@ func fetchOrGetCachedPosts(database *gorm.DB, subreddit db.Subreddit) []Post {
 
 	database.Model(&subreddit).Update("last_fetch_at", now)
 
-	// Upsert posts - update if exists, create if new
 	for _, post := range posts {
 		dbPost := db.Post{
 			RedditID:      post.ID,
@@ -126,19 +125,15 @@ func fetchOrGetCachedPosts(database *gorm.DB, subreddit db.Subreddit) []Post {
 			NSFW:          post.NSFW,
 		}
 
-		// Update or create - this will update existing posts or create new ones
 		var existingPost db.Post
 		queryResult := database.Where("reddit_id = ?", post.ID).First(&existingPost)
 		if queryResult.Error == nil {
-			// Post exists, update it
 			database.Model(&existingPost).Updates(dbPost)
 		} else {
-			// Post doesn't exist, create it
 			database.Create(&dbPost)
 		}
 	}
 
-	// Return all posts for this subreddit (including old ones not in current fetch)
 	var allPosts []db.Post
 	database.Where("subreddit_name = ?", subreddit.Name).Order("created_utc DESC").Find(&allPosts)
 
