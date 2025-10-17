@@ -15,8 +15,6 @@ func main() {
 	}
 
 	ctx := db.WithDB(context.Background(), database)
-
-	reddit.StartCleanupTicker(ctx)
-
+	reddit.Purge(ctx)
 	cmd.Execute(ctx)
 }
