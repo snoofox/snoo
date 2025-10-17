@@ -19,8 +19,8 @@ func Purge(ctx context.Context) {
 	database := db.FromContext(ctx)
 	oneWeekAgo := time.Now().Add(-7 * 24 * time.Hour)
 
-	database.Where("created_at < ?", oneWeekAgo).Delete(&db.Post{})
-	database.Where("created_at < ?", oneWeekAgo).Delete(&db.Comment{})
+	database.Unscoped().Where("created_at < ?", oneWeekAgo).Delete(&db.Post{})
+	database.Unscoped().Where("created_at < ?", oneWeekAgo).Delete(&db.Comment{})
 }
 
 func FetchSubreddit(name string) (Subreddit, error) {
@@ -106,8 +106,8 @@ func fetchOrGetCachedPosts(database *gorm.DB, subreddit db.Subreddit) []Post {
 	}
 
 	database.Model(&subreddit).Update("last_fetch_at", now)
-	database.Where("subreddit_name = ?", subreddit.Name).Delete(&db.Post{})
 
+	// Upsert posts - update if exists, create if new
 	for _, post := range posts {
 		dbPost := db.Post{
 			RedditID:      post.ID,
@@ -125,10 +125,43 @@ func fetchOrGetCachedPosts(database *gorm.DB, subreddit db.Subreddit) []Post {
 			Thumbnail:     post.Thumbnail,
 			NSFW:          post.NSFW,
 		}
-		database.Create(&dbPost)
+
+		// Update or create - this will update existing posts or create new ones
+		var existingPost db.Post
+		queryResult := database.Where("reddit_id = ?", post.ID).First(&existingPost)
+		if queryResult.Error == nil {
+			// Post exists, update it
+			database.Model(&existingPost).Updates(dbPost)
+		} else {
+			// Post doesn't exist, create it
+			database.Create(&dbPost)
+		}
 	}
 
-	return posts
+	// Return all posts for this subreddit (including old ones not in current fetch)
+	var allPosts []db.Post
+	database.Where("subreddit_name = ?", subreddit.Name).Order("created_utc DESC").Find(&allPosts)
+
+	resultPosts := make([]Post, len(allPosts))
+	for i, p := range allPosts {
+		resultPosts[i] = Post{
+			ID:          p.RedditID,
+			Title:       p.Title,
+			Author:      p.Author,
+			Subreddit:   p.SubredditName,
+			Permalink:   p.Permalink,
+			URL:         p.URL,
+			Score:       p.Score,
+			NumComments: p.NumComments,
+			CreatedUTC:  p.CreatedUTC,
+			IsSelf:      p.IsSelf,
+			Selftext:    p.Selftext,
+			Thumbnail:   p.Thumbnail,
+			NSFW:        p.NSFW,
+		}
+	}
+
+	return resultPosts
 }
 
 func fetchSubredditPosts(name string) ([]Post, error) {
@@ -167,20 +200,40 @@ func fetchSubredditPosts(name string) ([]Post, error) {
 	children := data["children"].([]any)
 
 	for _, child := range children {
-		childData := child.(map[string]any)["data"].(map[string]any)
+		childData, ok := child.(map[string]any)["data"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Check if all required fields exist
+		id, idOk := childData["id"].(string)
+		title, titleOk := childData["title"].(string)
+		author, authorOk := childData["author"].(string)
+		subreddit, subredditOk := childData["subreddit"].(string)
+		permalink, permalinkOk := childData["permalink"].(string)
+		url, urlOk := childData["url"].(string)
+		score, scoreOk := childData["score"].(float64)
+		numComments, numCommentsOk := childData["num_comments"].(float64)
+		createdUTC, createdUTCOk := childData["created_utc"].(float64)
+		isSelf, isSelfOk := childData["is_self"].(bool)
+		nsfw, nsfwOk := childData["over_18"].(bool)
+
+		if !idOk || !titleOk || !authorOk || !subredditOk || !permalinkOk || !urlOk || !scoreOk || !numCommentsOk || !createdUTCOk || !isSelfOk || !nsfwOk {
+			continue
+		}
 
 		post := Post{
-			ID:          childData["id"].(string),
-			Title:       childData["title"].(string),
-			Author:      childData["author"].(string),
-			Subreddit:   childData["subreddit"].(string),
-			Permalink:   childData["permalink"].(string),
-			URL:         childData["url"].(string),
-			Score:       int(childData["score"].(float64)),
-			NumComments: int(childData["num_comments"].(float64)),
-			CreatedUTC:  childData["created_utc"].(float64),
-			IsSelf:      childData["is_self"].(bool),
-			NSFW:        childData["over_18"].(bool),
+			ID:          id,
+			Title:       title,
+			Author:      author,
+			Subreddit:   subreddit,
+			Permalink:   permalink,
+			URL:         url,
+			Score:       int(score),
+			NumComments: int(numComments),
+			CreatedUTC:  createdUTC,
+			IsSelf:      isSelf,
+			NSFW:        nsfw,
 		}
 
 		if selftext, ok := childData["selftext"].(string); ok {

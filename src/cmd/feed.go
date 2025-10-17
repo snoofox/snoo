@@ -173,7 +173,7 @@ func (m model) viewList() string {
 }
 
 func (m model) renderListContent() string {
-	s := titleStyle.Render("Your Feed") + "\n"
+	s := titleStyle.Render("󰑍 Your Feed") + "\n"
 	s += dimStyle.Render(fmt.Sprintf("%d posts", len(m.posts))) + "\n\n"
 
 	for i, post := range m.posts {
