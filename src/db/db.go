@@ -5,6 +5,7 @@ import (
 
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 type contextKey string
@@ -12,7 +13,9 @@ type contextKey string
 const dbKey contextKey = "db"
 
 func GetDB() (*gorm.DB, error) {
-	db, err := gorm.Open(sqlite.Open("data.sqlite3"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open("data.sqlite3"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
 	if err != nil {
 		return nil, err
 	}
