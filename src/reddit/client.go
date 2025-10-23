@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"snoo/src/db"
+	"sort"
 	"sync"
 	"time"
 
@@ -278,7 +280,32 @@ func FetchFeeds(ctx context.Context) []Post {
 	}
 
 	wg.Wait()
+	sortPostsByHot(allPosts)
 	return allPosts
+}
+
+func sortPostsByHot(posts []Post) {
+	sort.Slice(posts, func(i, j int) bool {
+		return calculateHotScore(posts[i]) > calculateHotScore(posts[j])
+	})
+}
+
+func calculateHotScore(post Post) float64 {
+	postTime := time.Unix(int64(post.CreatedUTC), 0)
+	hoursSincePost := time.Since(postTime).Hours()
+
+	score := float64(post.Score)
+	if score < 1 {
+		score = 1
+	}
+
+	// Hot score formula: log(score) / (age + 2)^1.5
+	// The +2 prevents division by zero and gives new posts a boost
+	// The ^1.5 exponent makes older posts decay faster
+	hotScore := math.Log10(score) / math.Pow(hoursSincePost+2, 1.5)
+	engagementBoost := math.Log10(float64(post.NumComments + 1))
+
+	return hotScore + (engagementBoost * 0.1)
 }
 
 func FetchComments(ctx context.Context, permalink string) ([]Comment, error) {
