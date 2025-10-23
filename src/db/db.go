@@ -20,7 +20,7 @@ func GetDB() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	db.AutoMigrate(&Subreddit{}, &Post{}, &Comment{}, &Setting{})
+	db.AutoMigrate(&Source{}, &Post{}, &Comment{}, &Setting{})
 
 	return db, nil
 }

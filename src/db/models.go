@@ -6,35 +6,34 @@ import (
 	"gorm.io/gorm"
 )
 
-type Subreddit struct {
+// Source represents a unified feed source (subreddit, RSS feed, etc.)
+type Source struct {
 	gorm.Model
-	RedditID    string `gorm:"uniqueIndex;size:12"`
-	Name        string `gorm:"uniqueIndex;size:64"`
-	DisplayName string `gorm:"size:128"`
-	Desc        string `gorm:"type:text"`
-	Subscribers float64
-	NSFW        bool
-	IconURL     string
-	CreatedUTC  float64
+	Type        string `gorm:"size:32;index"`
+	Identifier  string `gorm:"size:512;index"` // subreddit name, RSS URL, etc.
+	Name        string `gorm:"size:256"`
+	DisplayName string `gorm:"size:256"`
+	Description string `gorm:"type:text"`
+	IconURL     string `gorm:"size:512"`
 	LastFetchAt *time.Time
 }
 
 type Post struct {
 	gorm.Model
-	RedditID        string `gorm:"uniqueIndex;size:12"`
+	SourceID        uint `gorm:"index"`
+	Source          Source
+	SourceType      string `gorm:"size:32;index"`
+	ExternalID      string `gorm:"size:512;index"` // Reddit ID, RSS GUID, etc.
 	Title           string `gorm:"type:text"`
-	Author          string `gorm:"size:64"`
-	SubredditID     uint
-	Subreddit       Subreddit
-	SubredditName   string `gorm:"size:64;index"`
+	Author          string `gorm:"size:128"`
+	SourceName      string `gorm:"size:256;index"`
 	Permalink       string `gorm:"size:512"`
 	URL             string `gorm:"type:text"`
 	Score           int
 	NumComments     int
-	CreatedUTC      float64
-	IsSelf          bool
-	Selftext        string `gorm:"type:text"`
-	Thumbnail       string `gorm:"size:512"`
+	CreatedUTC      float64 `gorm:"index"`
+	Content         string  `gorm:"type:text"`
+	Thumbnail       string  `gorm:"size:512"`
 	NSFW            bool
 	CommentsFetchAt *time.Time
 }

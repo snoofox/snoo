@@ -3,7 +3,7 @@ package cmd
 import (
 	"fmt"
 	"snoo/src/db"
-	"snoo/src/reddit"
+	"snoo/src/feed"
 	"strconv"
 
 	"github.com/spf13/cobra"
@@ -11,35 +11,37 @@ import (
 
 var subCmd = &cobra.Command{
 	Use:   "sub",
-	Short: "Subscribe / unsubscribe / list subs",
+	Short: "Manage subscriptions",
 }
 
 var subListCmd = &cobra.Command{
 	Use:   "list",
-	Short: "List subscribed subreddits",
+	Short: "List all subscribed sources",
 	Run: func(cmd *cobra.Command, args []string) {
 		database := db.FromContext(cmd.Context())
+		manager := feed.NewManager(database)
 
-		var subreddits []db.Subreddit
-		result := database.Find(&subreddits)
-
-		if result.Error != nil {
-			fmt.Printf("Error fetching subreddits: %v\n", result.Error)
+		sources, err := manager.ListSources()
+		if err != nil {
+			fmt.Printf("Error listing sources: %v\n", err)
 			return
 		}
 
-		if len(subreddits) == 0 {
-			fmt.Println("No subscribed subreddits")
+		if len(sources) == 0 {
+			fmt.Println("No subscribed sources")
+			fmt.Println("\nAvailable commands:")
+			fmt.Println("  snoo sub add <subreddit>  - Subscribe to a subreddit")
+			fmt.Println("  snoo sub rss <url>        - Subscribe to an RSS feed")
 			return
 		}
 
-		fmt.Printf("Subscribed to %d subreddit(s):\n\n", len(subreddits))
-		for _, sub := range subreddits {
-			fmt.Printf("%d. r/%s\n", sub.ID, sub.DisplayName)
-			if sub.Desc != "" {
-				fmt.Printf("  %s\n", sub.Desc)
+		fmt.Printf("Subscribed to %d source(s):\n\n", len(sources))
+		for _, src := range sources {
+			fmt.Printf("%d. [%s] %s\n", src.ID, src.Type, src.DisplayName)
+			if src.Description != "" {
+				fmt.Printf("   %s\n", src.Description)
 			}
-			fmt.Printf("  Subscribers: %.0f\n\n", sub.Subscribers)
+			fmt.Printf("   Identifier: %s\n\n", src.Identifier)
 		}
 	},
 }
@@ -51,60 +53,53 @@ var subAddCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context()
 		database := db.FromContext(ctx)
-		resp, err := reddit.FetchSubreddit(args[0])
-		if err != nil {
-			fmt.Printf("Error fetching subreddit: %s\n", args[0])
+		manager := feed.NewManager(database)
+
+		fmt.Printf("Subscribing to r/%s...\n", args[0])
+		if err := manager.Subscribe(ctx, "reddit", args[0]); err != nil {
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
-		subreddit := &db.Subreddit{
-			RedditID:    resp.RedditID,
-			Name:        resp.Name,
-			DisplayName: resp.DisplayName,
-			Desc:        resp.Desc,
-			Subscribers: resp.Subscribers,
-			NSFW:        resp.NSFW,
-			IconURL:     resp.IconURL,
-			CreatedUTC:  resp.CreatedUTC,
-			LastFetchAt: resp.LastFetchAt,
-		}
+		fmt.Printf("Successfully subscribed to r/%s\n", args[0])
+	},
+}
 
-		result := database.Create(subreddit)
-		if result.Error != nil {
-			// Check for duplicate key error
-			if result.Error.Error() == "UNIQUE constraint failed: subreddits.reddit_id" ||
-				result.Error.Error() == "UNIQUE constraint failed: subreddits.name" {
-				fmt.Printf("Already subscribed to r/%s\n", args[0])
-				return
-			}
-			fmt.Printf("Error subscribing to r/%s: %v\n", args[0], result.Error)
+var rssAddCmd = &cobra.Command{
+	Use:   "rss URL",
+	Short: "Subscribe to an RSS feed",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+		database := db.FromContext(ctx)
+		manager := feed.NewManager(database)
+
+		fmt.Printf("Subscribing to RSS feed...\n")
+		if err := manager.Subscribe(ctx, "rss", args[0]); err != nil {
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Successfully subscribed to r/%s\n", resp.DisplayName)
+		fmt.Println("Successfully subscribed to RSS feed")
 	},
 }
 
 var subRmCmd = &cobra.Command{
 	Use:   "rm ID",
-	Short: "Unsubscribe from a subreddit",
+	Short: "Unsubscribe from a source",
 	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		id, err := strconv.Atoi(args[0])
+		id, err := strconv.ParseUint(args[0], 10, 32)
 		if err != nil {
 			fmt.Println("Please provide a numeric ID")
 			return
 		}
+
 		database := db.FromContext(cmd.Context())
+		manager := feed.NewManager(database)
 
-		result := database.Unscoped().Delete(&db.Subreddit{}, id)
-		if result.Error != nil {
-			fmt.Printf("Error unsubscribing: %v\n", result.Error)
-			return
-		}
-
-		if result.RowsAffected == 0 {
-			fmt.Printf("No subreddit found with ID %d\n", id)
+		if err := manager.Unsubscribe(uint(id)); err != nil {
+			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
@@ -114,5 +109,5 @@ var subRmCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(subCmd)
-	subCmd.AddCommand(subListCmd, subAddCmd, subRmCmd)
+	subCmd.AddCommand(subListCmd, subAddCmd, rssAddCmd, subRmCmd)
 }

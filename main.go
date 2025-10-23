@@ -5,16 +5,21 @@ import (
 	"log"
 	"snoo/src/cmd"
 	"snoo/src/db"
-	"snoo/src/reddit"
+	"snoo/src/feed"
+	"snoo/src/providers/reddit"
+	"snoo/src/providers/rss"
 )
 
 func main() {
+	// Register feed providers
+	feed.Register(reddit.New())
+	feed.Register(rss.New())
+
 	database, err := db.GetDB()
 	if err != nil {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	ctx := db.WithDB(context.Background(), database)
-	reddit.Purge(ctx)
 	cmd.Execute(ctx)
 }

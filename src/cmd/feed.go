@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"snoo/src/db"
-	"snoo/src/reddit"
+	"snoo/src/feed"
 	"sort"
 	"strings"
 
@@ -29,17 +29,17 @@ var (
 )
 
 type commentsLoadedMsg struct {
-	comments []reddit.Comment
+	comments []Comment
 }
 
 type model struct {
-	posts           []reddit.Post
+	posts           []Post
 	cursor          int
 	viewing         bool
 	selected        int
 	width           int
 	height          int
-	comments        []reddit.Comment
+	comments        []Comment
 	loadingComments bool
 	ctx             context.Context
 	viewport        viewport.Model
@@ -186,7 +186,7 @@ func (m model) renderListContent() string {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
 
-			sub := subredditStyle.Render(post.Subreddit)
+			sub := subredditStyle.Render(post.SourceName)
 			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
 			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
 			sep := separatorStyle.Render("•")
@@ -199,7 +199,7 @@ func (m model) renderListContent() string {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
 
-			sub := subredditStyle.Render(post.Subreddit)
+			sub := subredditStyle.Render(post.SourceName)
 			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
 			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
 			sep := separatorStyle.Render("•")
@@ -215,11 +215,44 @@ func (m model) renderListContent() string {
 func (m model) loadCommentsCmd() tea.Cmd {
 	return func() tea.Msg {
 		post := m.posts[m.selected]
-		comments, err := reddit.FetchComments(m.ctx, post.Permalink)
-		if err != nil {
-			return commentsLoadedMsg{comments: []reddit.Comment{}}
+		if post.SourceType == "reddit" {
+			database := db.FromContext(m.ctx)
+			manager := feed.NewManager(database)
+
+			feedPost := feed.Post{
+				ID:         post.ID,
+				SourceType: post.SourceType,
+				Permalink:  post.Permalink,
+			}
+
+			feedComments, err := manager.FetchComments(m.ctx, feedPost)
+			if err != nil {
+				return commentsLoadedMsg{comments: []Comment{}}
+			}
+
+			comments := make([]Comment, len(feedComments))
+			for i, c := range feedComments {
+				comments[i] = convertComment(c)
+			}
+			return commentsLoadedMsg{comments: comments}
 		}
-		return commentsLoadedMsg{comments: comments}
+		return commentsLoadedMsg{comments: []Comment{}}
+	}
+}
+
+func convertComment(c feed.Comment) Comment {
+	replies := make([]Comment, len(c.Replies))
+	for i, r := range c.Replies {
+		replies[i] = convertComment(r)
+	}
+	return Comment{
+		ID:        c.ID,
+		Author:    c.Author,
+		Body:      c.Body,
+		Score:     c.Score,
+		CreatedAt: float64(c.CreatedAt.Unix()),
+		Depth:     c.Depth,
+		Replies:   replies,
 	}
 }
 
@@ -232,22 +265,24 @@ func (m model) renderPostContent() string {
 
 	s := "\n" + titleStyle.Render(wrapText(post.Title, maxWidth)) + "\n\n"
 
-	if post.IsSelf && post.Selftext != "" {
-		rendered := renderMarkdown(post.Selftext, maxWidth)
+	if post.Content != "" {
+		rendered := renderMarkdown(post.Content, maxWidth)
 		s += rendered + "\n"
-	} else if !post.IsSelf {
+	} else {
 		s += urlStyle.Render(post.URL) + "\n"
 	}
 
-	s += "\n" + dimStyle.Render(fmt.Sprintf("─── %d comments ───", post.NumComments)) + "\n\n"
+	if post.SourceType == "reddit" {
+		s += "\n" + dimStyle.Render(fmt.Sprintf("─── %d comments ───", post.NumComments)) + "\n\n"
 
-	if m.loadingComments {
-		s += dimStyle.Render("Loading comments...") + "\n"
-	} else if len(m.comments) == 0 {
-		s += dimStyle.Render("No comments yet") + "\n"
-	} else {
-		for _, comment := range m.comments {
-			s += renderComment(comment, maxWidth) + "\n"
+		if m.loadingComments {
+			s += dimStyle.Render("Loading comments...") + "\n"
+		} else if len(m.comments) == 0 {
+			s += dimStyle.Render("No comments yet") + "\n"
+		} else {
+			for _, comment := range m.comments {
+				s += renderComment(comment, maxWidth) + "\n"
+			}
 		}
 	}
 
@@ -272,7 +307,7 @@ func getThreadColor(depth int) lipgloss.Color {
 	return lipgloss.Color(colors[depth%len(colors)])
 }
 
-func renderComment(comment reddit.Comment, maxWidth int) string {
+func renderComment(comment Comment, maxWidth int) string {
 	var s strings.Builder
 
 	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C6C6C"))
@@ -311,20 +346,55 @@ func renderComment(comment reddit.Comment, maxWidth int) string {
 
 var feedCmd = &cobra.Command{
 	Use:   "feed",
-	Short: "List hot posts",
+	Short: "List hot posts from all sources",
 	Run: func(cmd *cobra.Command, args []string) {
-		// Load saved theme
 		loadSavedTheme(cmd.Context())
 
-		posts := reddit.FetchFeeds(cmd.Context())
+		database := db.FromContext(cmd.Context())
+		manager := feed.NewManager(database)
 
-		if len(posts) == 0 {
-			fmt.Println("\nNo posts found. Subscribe to some subreddits first!")
+		feedPosts, err := manager.FetchAll(cmd.Context())
+		if err != nil {
+			fmt.Printf("Error fetching feeds: %v\n", err)
 			return
 		}
 
+		if len(feedPosts) == 0 {
+			fmt.Println("\nNo posts found. Subscribe to some sources first!")
+			fmt.Println("Try: snoo sub add golang")
+			fmt.Println("     snoo sub rss https://example.com/feed.xml")
+			fmt.Println("     snoo sub hn")
+			return
+		}
+
+		// Convert feed.Post to cmd.Post for UI
+		posts := make([]Post, len(feedPosts))
+		for i, p := range feedPosts {
+			posts[i] = Post{
+				ID:          p.ID,
+				Title:       p.Title,
+				Author:      p.Author,
+				SourceName:  p.SourceName,
+				SourceType:  p.SourceType,
+				Permalink:   p.Permalink,
+				URL:         p.URL,
+				Score:       p.Score,
+				NumComments: p.NumComments,
+				CreatedUTC:  float64(p.CreatedAt.Unix()),
+				Content:     p.Content,
+				Thumbnail:   p.Thumbnail,
+				NSFW:        p.NSFW,
+			}
+		}
+
+		// Sort by time (newest first), then by score
 		sort.Slice(posts, func(i, j int) bool {
-			return posts[i].Score > posts[j].Score
+			// If both have scores, sort by score
+			if posts[i].Score > 0 && posts[j].Score > 0 {
+				return posts[i].Score > posts[j].Score
+			}
+			// Otherwise sort by time (newest first)
+			return posts[i].CreatedUTC > posts[j].CreatedUTC
 		})
 
 		p := tea.NewProgram(model{posts: posts, ctx: cmd.Context()}, tea.WithAltScreen())
