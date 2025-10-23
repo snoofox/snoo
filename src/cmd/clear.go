@@ -27,17 +27,17 @@ var clearCmd = &cobra.Command{
 		}
 		commentsDeleted := result.RowsAffected
 
-		result = database.Model(&db.Subreddit{}).Where("1=1").Update("last_fetch_at", nil)
+		result = database.Model(&db.Source{}).Where("1=1").Update("last_fetch_at", nil)
 		if result.Error != nil {
-			fmt.Printf("Error resetting subreddit fetch times: %v\n", result.Error)
+			fmt.Printf("Error resetting source fetch times: %v\n", result.Error)
 			return
 		}
 
 		fmt.Printf("Cache cleared successfully!\n")
 		fmt.Printf("- Deleted %d posts\n", postsDeleted)
 		fmt.Printf("- Deleted %d comments\n", commentsDeleted)
-		fmt.Printf("- Reset fetch times for all subreddits\n")
-		fmt.Printf("\nNext feed fetch will get fresh data from Reddit.\n")
+		fmt.Printf("- Reset fetch times for all sources\n")
+		fmt.Printf("\nNext feed fetch will get fresh data.\n")
 	},
 }
 

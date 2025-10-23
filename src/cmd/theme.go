@@ -196,7 +196,6 @@ var themeCmd = &cobra.Command{
 
 		themeName := args[0]
 		if SetTheme(themeName) {
-			// Save to database
 			if gormDB := db.FromContext(cmd.Context()); gormDB != nil {
 				db.SetSetting(gormDB, "theme", themeName)
 			}
