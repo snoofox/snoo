@@ -9,7 +9,7 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:   "snoo",
-	Short: "reddit reader",
+	Short: "reader",
 	Run: func(cmd *cobra.Command, args []string) {
 		feedCmd.Run(cmd, args)
 	},
