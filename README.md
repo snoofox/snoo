@@ -1,6 +1,6 @@
 # snoo
 
-A terminal-based Reddit reader built with Go
+A terminal-based universal feed reader built with Go
 
 ![snoo preview](https://i.ibb.co/tp0SGpb6/snoo.png)
 
@@ -8,10 +8,11 @@ A terminal-based Reddit reader built with Go
 
 ## Features
 
-- � Browrse hot posts from your subscribed subreddits
-- � Read tcomments with threaded replies and colored thread indicators
+- 🌐 Multi-provider support - Reddit, RSS feeds, and more coming soon
+- 📰 Browse posts from all your subscribed sources in one unified feed
+- 💬 Read comments with threaded replies and colored thread indicators (Reddit)
 - 🎨 Multiple color themes (Catppuccin, Dracula, GitHub, Peppermint, and more)
-- 📦 No authentication needed - uses Reddit's public JSON API
+- 📦 No authentication needed - uses public APIs
 - 💾 Smart caching with SQLite
 - ⚡ Fast and lightweight
 
@@ -31,14 +32,17 @@ go build
 
 ## Quick Start
 
-1. Subscribe to some subreddits:
+1. Subscribe to some feeds:
 ```bash
+# Add Reddit subreddits
 snoo sub add golang
 snoo sub add programming
-snoo sub add linux
+
+# Add RSS feeds
+snoo sub rss https://example.com/feed.xml
 ```
 
-2. View your feed:
+2. View your unified feed:
 ```bash
 snoo
 # or explicitly
@@ -54,9 +58,13 @@ snoo theme catppuccin
 
 ### Managing Subscriptions
 
-Subscribe to a subreddit:
+Subscribe to a feed:
 ```bash
+# Reddit subreddit
 snoo sub add <subreddit-name>
+
+# RSS feed
+snoo sub rss <feed-url>
 ```
 
 List your subscriptions:
@@ -64,14 +72,14 @@ List your subscriptions:
 snoo sub list
 ```
 
-Unsubscribe from a subreddit:
+Unsubscribe from a feed:
 ```bash
-snoo sub remove <subreddit-id> # you can get id from sub list
+snoo sub rm <subscription-id> # you can get id from sub list
 ```
 
 ### Viewing Your Feed
 
-View posts from subscribed subreddits:
+View posts from all subscribed sources:
 ```bash
 snoo feed
 # or just
@@ -113,9 +121,16 @@ Your theme preference is saved and persists across sessions.
 - `Esc` or `Backspace` - Back to feed
 - `q` - Quit
 
+## Supported Providers
+
+- **Reddit** - Browse subreddits, read threaded comments
+- **RSS** - Subscribe to any RSS/Atom feed
+- **More coming soon** - 4chan and other platforms planned
+
 ## How it works
 
-- Uses Reddit's public JSON API (no authentication required)
+- Pluggable provider architecture for easy extensibility
+- Uses public APIs (no authentication required)
 - Stores subscriptions and cached data in a local SQLite database (`data.sqlite3`)
 - Posts are cached for 1 hour, comments for 30 minutes
 - Old data is automatically cleaned up every 6 hours
