@@ -101,10 +101,15 @@ func (p *Provider) ValidateSource(ctx context.Context, identifier string) (*feed
 		description = rssFeed.ITunesExt.Summary
 	}
 
+	iconURL := ""
+	if rssFeed.Image != nil {
+		iconURL = rssFeed.Image.URL
+	}
+
 	return &feed.SourceMetadata{
 		Name:        rssFeed.Title,
 		DisplayName: rssFeed.Title,
 		Description: description,
-		IconURL:     rssFeed.Image.URL,
+		IconURL:     iconURL,
 	}, nil
 }
