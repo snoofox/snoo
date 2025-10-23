@@ -11,7 +11,6 @@ import (
 )
 
 func main() {
-	// Register feed providers
 	feed.Register(reddit.New())
 	feed.Register(rss.New())
 
