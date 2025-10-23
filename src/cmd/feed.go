@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 )
@@ -232,7 +233,8 @@ func (m model) renderPostContent() string {
 	s := "\n" + titleStyle.Render(wrapText(post.Title, maxWidth)) + "\n\n"
 
 	if post.IsSelf && post.Selftext != "" {
-		s += wrapText(post.Selftext, maxWidth) + "\n"
+		rendered := renderMarkdown(post.Selftext, maxWidth)
+		s += rendered + "\n"
 	} else if !post.IsSelf {
 		s += urlStyle.Render(post.URL) + "\n"
 	}
@@ -288,8 +290,9 @@ func renderComment(comment reddit.Comment, maxWidth int) string {
 	s.WriteString(metaStyle.Render(fmt.Sprintf("↑%d", comment.Score)))
 	s.WriteString("\n")
 
-	bodyLines := strings.Split(wrapText(comment.Body, maxWidth-(comment.Depth*2)), "\n")
-	for _, line := range bodyLines {
+	rendered := renderMarkdown(comment.Body, maxWidth-(comment.Depth*2))
+	bodyLines := strings.SplitSeq(rendered, "\n")
+	for line := range bodyLines {
 		s.WriteString(indent)
 		s.WriteString(line)
 		s.WriteString("\n")
@@ -379,6 +382,27 @@ func wrapText(text string, width int) string {
 	}
 
 	return result.String()
+}
+
+func renderMarkdown(text string, width int) string {
+	if text == "" {
+		return ""
+	}
+
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return wrapText(text, width)
+	}
+
+	rendered, err := r.Render(text)
+	if err != nil {
+		return wrapText(text, width)
+	}
+	result := strings.TrimSpace(rendered)
+	return result
 }
 
 func loadSavedTheme(ctx context.Context) {
