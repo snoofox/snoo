@@ -43,7 +43,6 @@ type model struct {
 	loadingComments bool
 	ctx             context.Context
 	viewport        viewport.Model
-	listViewport    viewport.Model
 	ready           bool
 }
 
@@ -61,15 +60,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if !m.ready {
 			m.viewport = viewport.New(msg.Width, msg.Height-2)
-			m.listViewport = viewport.New(msg.Width, msg.Height-2)
-			m.listViewport.SetContent(m.renderListContent())
 			m.ready = true
 		} else {
 			m.viewport.Width = msg.Width
 			m.viewport.Height = msg.Height - 2
-			m.listViewport.Width = msg.Width
-			m.listViewport.Height = msg.Height - 2
-			m.listViewport.SetContent(m.renderListContent())
 		}
 
 	case commentsLoadedMsg:
@@ -100,14 +94,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "up", "k":
 				if m.cursor > 0 {
 					m.cursor--
-					m.listViewport.SetContent(m.renderListContent())
-					m.ensureCursorVisible()
 				}
 			case "down", "j":
 				if m.cursor < len(m.posts)-1 {
 					m.cursor++
-					m.listViewport.SetContent(m.renderListContent())
-					m.ensureCursorVisible()
 				}
 			case "enter", " ":
 				m.selected = m.cursor
@@ -136,29 +126,102 @@ func (m model) View() string {
 	return m.viewList()
 }
 
-func (m *model) ensureCursorVisible() {
-	headerLines := 4
-	linesPerPost := 3
-	cursorLine := headerLines + (m.cursor * linesPerPost)
-
-	viewportTop := m.listViewport.YOffset
-	viewportBottom := viewportTop + m.listViewport.Height
-
-	if cursorLine < viewportTop {
-		m.listViewport.SetYOffset(cursorLine)
-	} else if cursorLine+linesPerPost > viewportBottom {
-		newOffset := cursorLine - m.listViewport.Height + linesPerPost
-		if newOffset < 0 {
-			newOffset = 0
-		}
-		m.listViewport.SetYOffset(newOffset)
-	}
-}
-
 func (m model) viewList() string {
 	if !m.ready {
 		return "Loading..."
 	}
+
+	// Calculate visible range
+	headerLines := 4
+	linesPerPost := 3
+	availableLines := m.height - 2 // Reserve space for help text
+
+	// Calculate which posts should be visible
+	firstVisiblePost := 0
+	if m.cursor > 0 {
+		// Keep cursor in middle third of screen when possible
+		middlePost := (availableLines / linesPerPost) / 3
+		firstVisiblePost = m.cursor - middlePost
+		if firstVisiblePost < 0 {
+			firstVisiblePost = 0
+		}
+	}
+
+	maxVisiblePosts := (availableLines - headerLines) / linesPerPost
+	lastVisiblePost := firstVisiblePost + maxVisiblePosts
+	if lastVisiblePost > len(m.posts) {
+		lastVisiblePost = len(m.posts)
+	}
+
+	// Render content
+	s := "\n"
+	s += titleStyle.Render("  󰑍  Your Feed") + "\n"
+	s += dimStyle.Render(fmt.Sprintf("  %d posts", len(m.posts))) + "\n\n"
+
+	for i := firstVisiblePost; i < lastVisiblePost; i++ {
+		post := m.posts[i]
+		titleText := truncate(post.Title, 85)
+
+		if m.cursor == i {
+			cursor := cursorStyle.Render("● ")
+			nsfw := ""
+			if post.NSFW {
+				nsfw = nsfwStyle.Render(" NSFW ") + " "
+			}
+			sub := subredditStyle.Render(post.SourceName)
+
+			// Build metadata line with only non-zero values
+			metadata := ""
+			sep := separatorStyle.Render("•")
+
+			if post.Score > 0 {
+				metadata += scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
+			}
+
+			if post.NumComments > 0 {
+				if metadata != "" {
+					metadata += " " + sep + " "
+				}
+				metadata += commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
+			}
+
+			s += " " + cursor + selectedStyle.Render(titleText) + "\n"
+			if metadata != "" {
+				s += "   " + nsfw + sub + " " + sep + " " + metadata + "\n\n"
+			} else {
+				s += "   " + nsfw + sub + "\n\n"
+			}
+		} else {
+			nsfw := ""
+			if post.NSFW {
+				nsfw = nsfwStyle.Render(" NSFW ") + " "
+			}
+			sub := subredditStyle.Render(post.SourceName)
+
+			// Build metadata line with only non-zero values
+			metadata := ""
+			sep := separatorStyle.Render("•")
+
+			if post.Score > 0 {
+				metadata += scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
+			}
+
+			if post.NumComments > 0 {
+				if metadata != "" {
+					metadata += " " + sep + " "
+				}
+				metadata += commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
+			}
+
+			s += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB")).Render(titleText) + "\n"
+			if metadata != "" {
+				s += "   " + nsfw + sub + " " + sep + " " + metadata + "\n\n"
+			} else {
+				s += "   " + nsfw + sub + "\n\n"
+			}
+		}
+	}
+
 	theme := GetCurrentTheme()
 	helpText := dimStyle.Render("  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k") +
@@ -167,49 +230,7 @@ func (m model) viewList() string {
 		dimStyle.Render(" read  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
-	return m.listViewport.View() + "\n" + helpText
-}
-
-func (m model) renderListContent() string {
-	s := "\n"
-	s += titleStyle.Render("  󰑍  Your Feed") + "\n"
-	s += dimStyle.Render(fmt.Sprintf("  %d posts", len(m.posts))) + "\n\n"
-
-	for i, post := range m.posts {
-		titleText := truncate(post.Title, 85)
-
-		if m.cursor == i {
-			cursor := cursorStyle.Render("● ")
-
-			nsfw := ""
-			if post.NSFW {
-				nsfw = nsfwStyle.Render(" NSFW ") + " "
-			}
-
-			sub := subredditStyle.Render(post.SourceName)
-			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
-			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
-			sep := separatorStyle.Render("•")
-
-			s += " " + cursor + selectedStyle.Render(titleText) + "\n"
-			s += "   " + nsfw + sub + " " + sep + " " + score + " " + sep + " " + comments + "\n\n"
-		} else {
-			nsfw := ""
-			if post.NSFW {
-				nsfw = nsfwStyle.Render(" NSFW ") + " "
-			}
-
-			sub := subredditStyle.Render(post.SourceName)
-			score := scoreStyle.Render(fmt.Sprintf(" %d", post.Score))
-			comments := commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
-			sep := separatorStyle.Render("•")
-
-			s += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB")).Render(titleText) + "\n"
-			s += "   " + nsfw + sub + " " + sep + " " + score + " " + sep + " " + comments + "\n\n"
-		}
-	}
-
-	return s
+	return s + helpText
 }
 
 func (m model) loadCommentsCmd() tea.Cmd {
@@ -363,7 +384,6 @@ var feedCmd = &cobra.Command{
 			fmt.Println("\nNo posts found. Subscribe to some sources first!")
 			fmt.Println("Try: snoo sub add golang")
 			fmt.Println("     snoo sub rss https://example.com/feed.xml")
-			fmt.Println("     snoo sub hn")
 			return
 		}
 
