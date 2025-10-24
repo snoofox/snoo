@@ -1,7 +1,7 @@
 # snoo
 
 <div align="center">
-  <img src="https://i.ibb.co/KxpX9F8G/gopher.png" alt="snoo gopher" width="200"/>
+  <img src="https://i.ibb.co/KxpX9F8G/gopher.png" alt="snoo gopher"/>
 </div>
 
 A terminal-based universal feed reader built with Go
