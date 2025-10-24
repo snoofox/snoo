@@ -1,7 +1,7 @@
 # snoo
 
 <p align="center">
-  <img src="https://i.ibb.co/1tT199HX/gopher.png" alt="snoo gopher" style="max-width: 100%; height: auto;"/>
+  <img src="https://i.ibb.co/YTKjHCwq/wmremove-transformed-min.png" alt="snoo gopher" style="max-width: 100%; height: auto;"/>
 </p>
 
 A terminal-based universal feed reader built with Go
@@ -9,8 +9,8 @@ A terminal-based universal feed reader built with Go
 > ⚠️ **Disclaimer**: This is a vibe-coded project. Don't blame me if it sucks.
 
 ## Preview
-
 ![snoo preview](https://i.ibb.co/tp0SGpb6/snoo.png)
+![snoo preview 2](https://i.ibb.co/v64R7fYf/preview2.png)
 
 ## Features
 
