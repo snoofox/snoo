@@ -6,6 +6,7 @@ import (
 	"snoo/src/cmd"
 	"snoo/src/db"
 	"snoo/src/feed"
+	"snoo/src/providers/lobsters"
 	"snoo/src/providers/reddit"
 	"snoo/src/providers/rss"
 )
@@ -13,6 +14,7 @@ import (
 func main() {
 	feed.Register(reddit.New())
 	feed.Register(rss.New())
+	feed.Register(lobsters.New())
 
 	database, err := db.GetDB()
 	if err != nil {

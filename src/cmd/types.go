@@ -1,6 +1,5 @@
 package cmd
 
-// Post represents a post for UI display
 type Post struct {
 	ID          string
 	Title       string
@@ -17,7 +16,6 @@ type Post struct {
 	NSFW        bool
 }
 
-// Comment represents a comment for UI display
 type Comment struct {
 	ID        string
 	Author    string

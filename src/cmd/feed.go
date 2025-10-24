@@ -170,7 +170,6 @@ func (m model) viewList() string {
 			}
 			sub := subredditStyle.Render(post.SourceName)
 
-			// Build metadata line with only non-zero values
 			metadata := ""
 			sep := separatorStyle.Render("•")
 
@@ -236,7 +235,7 @@ func (m model) viewList() string {
 func (m model) loadCommentsCmd() tea.Cmd {
 	return func() tea.Msg {
 		post := m.posts[m.selected]
-		if post.SourceType == "reddit" {
+		if post.SourceType == "reddit" || post.SourceType == "lobsters" {
 			database := db.FromContext(m.ctx)
 			manager := feed.NewManager(database)
 
@@ -293,7 +292,7 @@ func (m model) renderPostContent() string {
 		s += urlStyle.Render(post.URL) + "\n"
 	}
 
-	if post.SourceType == "reddit" {
+	if post.SourceType == "reddit" || post.SourceType == "lobsters" {
 		s += "\n" + dimStyle.Render(fmt.Sprintf("─── %d comments ───", post.NumComments)) + "\n\n"
 
 		if m.loadingComments {
@@ -407,13 +406,10 @@ var feedCmd = &cobra.Command{
 			}
 		}
 
-		// Sort by time (newest first), then by score
 		sort.Slice(posts, func(i, j int) bool {
-			// If both have scores, sort by score
 			if posts[i].Score > 0 && posts[j].Score > 0 {
 				return posts[i].Score > posts[j].Score
 			}
-			// Otherwise sort by time (newest first)
 			return posts[i].CreatedUTC > posts[j].CreatedUTC
 		})
 
