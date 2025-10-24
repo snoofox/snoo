@@ -40,6 +40,10 @@ snoo sub add programming
 
 # Add RSS feeds
 snoo sub rss https://example.com/feed.xml
+
+# Add Lobsters
+snoo sub lobsters active
+snoo sub lobsters recent
 ```
 
 2. View your unified feed:
@@ -65,6 +69,9 @@ snoo sub add <subreddit-name>
 
 # RSS feed
 snoo sub rss <feed-url>
+
+# Lobsters (active or recent)
+snoo sub lobsters <category>
 ```
 
 List your subscriptions:
@@ -125,6 +132,7 @@ Your theme preference is saved and persists across sessions.
 
 - **Reddit** - Browse subreddits, read threaded comments
 - **RSS** - Subscribe to any RSS/Atom feed
+- **Lobsters** - Browse active or recent posts from lobste.rs
 - **More coming soon** - 4chan and other platforms planned
 
 ## How it works
