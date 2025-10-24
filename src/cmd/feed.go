@@ -3,7 +3,9 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"snoo/src/article"
 	"snoo/src/db"
+	"snoo/src/debug"
 	"snoo/src/feed"
 	"sort"
 	"strings"
@@ -32,6 +34,11 @@ type commentsLoadedMsg struct {
 	comments []Comment
 }
 
+type articleLoadedMsg struct {
+	content string
+	err     error
+}
+
 type model struct {
 	posts           []Post
 	cursor          int
@@ -41,6 +48,7 @@ type model struct {
 	height          int
 	comments        []Comment
 	loadingComments bool
+	loadingArticle  bool
 	ctx             context.Context
 	viewport        viewport.Model
 	ready           bool
@@ -72,6 +80,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.SetContent(m.renderPostContent())
 		m.viewport.GotoTop()
 
+	case articleLoadedMsg:
+		if msg.err != nil {
+			debug.Log("Failed to load article: %v", msg.err)
+			m.posts[m.selected].Content = fmt.Sprintf("Failed to load article: %v", msg.err)
+		} else if msg.content != "" {
+			m.posts[m.selected].Content = msg.content
+		} else {
+			m.posts[m.selected].Content = "No content could be extracted from this article."
+		}
+		m.loadingArticle = false
+		m.viewport.SetContent(m.renderPostContent())
+		m.viewport.GotoTop()
+
 	case tea.KeyMsg:
 		if m.viewing {
 			switch msg.String() {
@@ -79,6 +100,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewing = false
 				m.comments = nil
 				m.loadingComments = false
+				m.loadingArticle = false
+				return m, nil
+			case "r":
+				if !m.loadingArticle {
+					post := m.posts[m.selected]
+					if post.URL != "" && post.Content == "" {
+						m.loadingArticle = true
+						m.viewport.SetContent(m.renderPostContent())
+						return m, m.loadArticleCmd()
+					}
+				}
 				return m, nil
 			case "up", "k":
 				m.viewport, cmd = m.viewport.Update(msg)
@@ -131,15 +163,12 @@ func (m model) viewList() string {
 		return "Loading..."
 	}
 
-	// Calculate visible range
 	headerLines := 4
 	linesPerPost := 3
-	availableLines := m.height - 2 // Reserve space for help text
+	availableLines := m.height - 2
 
-	// Calculate which posts should be visible
 	firstVisiblePost := 0
 	if m.cursor > 0 {
-		// Keep cursor in middle third of screen when possible
 		middlePost := (availableLines / linesPerPost) / 3
 		firstVisiblePost = m.cursor - middlePost
 		if firstVisiblePost < 0 {
@@ -153,7 +182,6 @@ func (m model) viewList() string {
 		lastVisiblePost = len(m.posts)
 	}
 
-	// Render content
 	s := "\n"
 	s += titleStyle.Render("  󰑍  Your Feed") + "\n"
 	s += dimStyle.Render(fmt.Sprintf("  %d posts", len(m.posts))) + "\n\n"
@@ -197,7 +225,6 @@ func (m model) viewList() string {
 			}
 			sub := subredditStyle.Render(post.SourceName)
 
-			// Build metadata line with only non-zero values
 			metadata := ""
 			sep := separatorStyle.Render("•")
 
@@ -260,6 +287,17 @@ func (m model) loadCommentsCmd() tea.Cmd {
 	}
 }
 
+func (m model) loadArticleCmd() tea.Cmd {
+	return func() tea.Msg {
+		post := m.posts[m.selected]
+		if post.URL != "" {
+			content, err := article.Fetch(m.ctx, post.URL)
+			return articleLoadedMsg{content: content, err: err}
+		}
+		return articleLoadedMsg{content: "", err: fmt.Errorf("no URL available")}
+	}
+}
+
 func convertComment(c feed.Comment) Comment {
 	replies := make([]Comment, len(c.Replies))
 	for i, r := range c.Replies {
@@ -285,11 +323,16 @@ func (m model) renderPostContent() string {
 
 	s := "\n" + titleStyle.Render(wrapText(post.Title, maxWidth)) + "\n\n"
 
-	if post.Content != "" {
+	if m.loadingArticle {
+		s += dimStyle.Render("Loading article...") + "\n"
+	} else if post.Content != "" {
 		rendered := renderMarkdown(post.Content, maxWidth)
 		s += rendered + "\n"
 	} else {
 		s += urlStyle.Render(post.URL) + "\n"
+		if post.URL != "" {
+			s += "\n" + dimStyle.Render("Press 'r' to read full article") + "\n"
+		}
 	}
 
 	if post.SourceType == "reddit" || post.SourceType == "lobsters" {
@@ -310,7 +353,13 @@ func (m model) renderPostContent() string {
 }
 
 func (m model) viewPost() string {
-	return m.viewport.View() + "\n" + dimStyle.Render("j/k or ↑/↓: scroll • esc/backspace: back • q: quit")
+	post := m.posts[m.selected]
+	helpText := "j/k or ↑/↓: scroll"
+	if post.URL != "" && post.Content == "" && !m.loadingArticle {
+		helpText += " • r: read article"
+	}
+	helpText += " • esc/backspace: back • q: quit"
+	return m.viewport.View() + "\n" + dimStyle.Render(helpText)
 }
 
 func getThreadColor(depth int) lipgloss.Color {
@@ -386,7 +435,6 @@ var feedCmd = &cobra.Command{
 			return
 		}
 
-		// Convert feed.Post to cmd.Post for UI
 		posts := make([]Post, len(feedPosts))
 		for i, p := range feedPosts {
 			posts[i] = Post{
