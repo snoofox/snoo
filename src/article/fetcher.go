@@ -16,6 +16,10 @@ func Fetch(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("invalid URL")
 	}
 
+	if isMediaURL(url) {
+		return "", fmt.Errorf("cannot extract article from media URL")
+	}
+
 	debug.Log("Article: Fetching content from %s", url)
 
 	fetchCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -44,6 +48,12 @@ func Fetch(ctx context.Context, url string) (string, error) {
 		return "", fmt.Errorf("HTTP status %d", resp.StatusCode)
 	}
 
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" && !strings.Contains(contentType, "text/html") {
+		debug.Log("Article: Non-HTML content type: %s", contentType)
+		return "", fmt.Errorf("cannot extract article from non-HTML content (%s)", contentType)
+	}
+
 	article, err := readability.FromReader(resp.Body, resp.Request.URL)
 	if err != nil {
 		debug.Log("Article: Error parsing article: %v", err)
@@ -52,4 +62,21 @@ func Fetch(ctx context.Context, url string) (string, error) {
 
 	debug.Log("Article: Successfully extracted content (length: %d)", len(article.TextContent))
 	return article.TextContent, nil
+}
+
+func isMediaURL(url string) bool {
+	lowerURL := strings.ToLower(url)
+	mediaExtensions := []string{
+		".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".svg",
+		".mp4", ".webm", ".mov", ".avi", ".mkv",
+		".mp3", ".wav", ".ogg", ".flac",
+		".pdf", ".zip", ".tar", ".gz",
+	}
+
+	for _, ext := range mediaExtensions {
+		if strings.HasSuffix(lowerURL, ext) {
+			return true
+		}
+	}
+	return false
 }
