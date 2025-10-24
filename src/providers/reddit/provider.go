@@ -220,7 +220,7 @@ func parsePost(data map[string]interface{}, subreddit string) feed.Post {
 		ID:          id,
 		Title:       title,
 		Author:      author,
-		SourceName:  subreddit,
+		SourceName:  fmt.Sprintf("r/%s", subreddit),
 		SourceType:  "reddit",
 		Permalink:   permalink,
 		URL:         url,

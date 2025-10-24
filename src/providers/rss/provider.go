@@ -68,7 +68,7 @@ func (p *Provider) FetchPosts(ctx context.Context, source feed.Source) ([]feed.P
 			ID:          guid,
 			Title:       item.Title,
 			Author:      author,
-			SourceName:  source.Name,
+			SourceName:  fmt.Sprintf("rss/%s", source.Name),
 			SourceType:  "rss",
 			Permalink:   item.Link,
 			URL:         item.Link,
