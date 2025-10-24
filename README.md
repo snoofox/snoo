@@ -1,14 +1,20 @@
 # snoo
 
-A terminal-based universal feed reader built with Go
+<div align="center">
+  <img src="https://i.ibb.co/KxpX9F8G/gopher.png" alt="snoo gopher" width="200"/>
+</div>
 
-![snoo preview](https://i.ibb.co/tp0SGpb6/snoo.png)
+A terminal-based universal feed reader built with Go
 
 > ⚠️ **Disclaimer**: This is a vibe-coded project. Don't blame me if it sucks.
 
+## Preview
+
+![snoo preview](https://i.ibb.co/tp0SGpb6/snoo.png)
+
 ## Features
 
-- 🌐 Multi-provider support - Reddit, RSS feeds, and more coming soon
+- 🌐 Multi-provider support - Reddit, RSS feeds, Lobsters, and more coming soon
 - 📰 Browse posts from all your subscribed sources in one unified feed
 - 💬 Read comments with threaded replies and colored thread indicators (Reddit)
 - 🎨 Multiple color themes (Catppuccin, Dracula, GitHub, Peppermint, and more)
