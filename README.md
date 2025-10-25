@@ -9,7 +9,7 @@ A terminal-based universal feed reader built with Go
 > ⚠️ **Disclaimer**: This is a vibe-coded project. Don't blame me if it sucks.
 
 ## Preview
-![snoo preview](https://github.com/snoofox/snoo/raw/main/assets/demo.gif)
+![snoo preview](https://raw.githubusercontent.com/snoofox/snoo/main/assets/demo.gif)
 
 ## Features
 
