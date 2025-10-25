@@ -3,11 +3,11 @@ package feed
 import (
 	"context"
 	"fmt"
-	"snoo/src/db"
-	"snoo/src/debug"
 	"sync"
 	"time"
 
+	"github.com/snoofox/snoo/src/db"
+	"github.com/snoofox/snoo/src/debug"
 	"gorm.io/gorm"
 )
 

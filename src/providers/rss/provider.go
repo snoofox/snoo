@@ -3,11 +3,11 @@ package rss
 import (
 	"context"
 	"fmt"
-	"snoo/src/debug"
-	"snoo/src/feed"
 	"time"
 
 	"github.com/mmcdole/gofeed"
+	"github.com/snoofox/snoo/src/debug"
+	"github.com/snoofox/snoo/src/feed"
 )
 
 type Provider struct{}

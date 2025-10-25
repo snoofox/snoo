@@ -1,4 +1,4 @@
-module snoo
+module github.com/snoofox/snoo
 
 go 1.24.2
 

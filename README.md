@@ -25,7 +25,7 @@ A terminal-based universal feed reader built with Go
 ## Installation
 
 ```bash
-go install
+go install github.com/snoofox/snoo@latest
 ```
 
 Or build from source:
