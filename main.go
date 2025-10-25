@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"log"
-	"snoo/src/cmd"
-	"snoo/src/db"
-	"snoo/src/feed"
-	"snoo/src/providers/lobsters"
-	"snoo/src/providers/reddit"
-	"snoo/src/providers/rss"
+
+	"github.com/snoofox/snoo/src/cmd"
+	"github.com/snoofox/snoo/src/db"
+	"github.com/snoofox/snoo/src/feed"
+	"github.com/snoofox/snoo/src/providers/lobsters"
+	"github.com/snoofox/snoo/src/providers/reddit"
+	"github.com/snoofox/snoo/src/providers/rss"
 )
 
 func main() {

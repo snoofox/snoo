@@ -2,8 +2,8 @@ package cmd
 
 import (
 	"fmt"
-	"snoo/src/db"
 
+	"github.com/snoofox/snoo/src/db"
 	"github.com/spf13/cobra"
 )
 

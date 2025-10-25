@@ -3,10 +3,6 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"snoo/src/article"
-	"snoo/src/db"
-	"snoo/src/debug"
-	"snoo/src/feed"
 	"sort"
 	"strings"
 
@@ -14,6 +10,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/snoofox/snoo/src/article"
+	"github.com/snoofox/snoo/src/db"
+	"github.com/snoofox/snoo/src/debug"
+	"github.com/snoofox/snoo/src/feed"
 	"github.com/spf13/cobra"
 )
 

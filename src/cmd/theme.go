@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
-	"snoo/src/db"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/snoofox/snoo/src/db"
 	"github.com/spf13/cobra"
 )
 

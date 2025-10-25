@@ -2,10 +2,10 @@ package cmd
 
 import (
 	"fmt"
-	"snoo/src/db"
-	"snoo/src/feed"
 	"strconv"
 
+	"github.com/snoofox/snoo/src/db"
+	"github.com/snoofox/snoo/src/feed"
 	"github.com/spf13/cobra"
 )
 

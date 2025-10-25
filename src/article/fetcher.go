@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"snoo/src/debug"
 	"strings"
 	"time"
 
 	"github.com/go-shiori/go-readability"
+	"github.com/snoofox/snoo/src/debug"
 )
 
 func Fetch(ctx context.Context, url string) (string, error) {

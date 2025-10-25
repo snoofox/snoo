@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"snoo/src/feed"
 	"time"
+
+	"github.com/snoofox/snoo/src/feed"
 )
 
 const baseURL = "https://lobste.rs"
