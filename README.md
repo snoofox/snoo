@@ -9,8 +9,7 @@ A terminal-based universal feed reader built with Go
 > ⚠️ **Disclaimer**: This is a vibe-coded project. Don't blame me if it sucks.
 
 ## Preview
-![snoo preview](https://i.ibb.co/tp0SGpb6/snoo.png)
-![snoo preview 2](https://i.ibb.co/v64R7fYf/preview2.png)
+![snoo preview](https://github.com/snoofox/snoo/raw/main/assets/demo.gif)
 
 ## Features
 
@@ -25,7 +24,7 @@ A terminal-based universal feed reader built with Go
 ## Installation
 
 ```bash
-go install github.com/snoofox/snoo@latest
+CGO_ENABLED=1 go install github.com/snoofox/snoo@latest
 ```
 
 Or build from source:
