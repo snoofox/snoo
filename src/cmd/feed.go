@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"html"
 	"sort"
 	"strings"
 
@@ -469,6 +470,8 @@ var feedCmd = &cobra.Command{
 }
 
 func truncate(s string, maxLen int) string {
+	// Decode HTML entities first
+	s = html.UnescapeString(s)
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len(s) <= maxLen {
 		return s
@@ -477,6 +480,9 @@ func truncate(s string, maxLen int) string {
 }
 
 func wrapText(text string, width int) string {
+	// Decode HTML entities first
+	text = html.UnescapeString(text)
+
 	if width <= 0 {
 		return text
 	}
@@ -522,6 +528,9 @@ func renderMarkdown(text string, width int) string {
 	if text == "" {
 		return ""
 	}
+
+	// Decode HTML entities like &amp; -> &, &lt; -> <, etc.
+	text = html.UnescapeString(text)
 
 	r, err := glamour.NewTermRenderer(
 		glamour.WithAutoStyle(),
