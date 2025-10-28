@@ -15,7 +15,10 @@ A terminal-based universal feed reader built with Go
 
 - 🌐 Multi-provider support - Reddit, RSS feeds, Lobsters, and more coming soon
 - 📰 Browse posts from all your subscribed sources in one unified feed
-- 💬 Read comments with threaded replies and colored thread indicators (Reddit)
+- 🔍 Filter posts by source with interactive toggle UI
+- 💬 Read comments with threaded replies and colored thread indicators (Reddit & Lobsters)
+- 📖 Read full articles directly in the terminal
+- 🎯 Subscribe to different Reddit sorts (hot, new, rising, top, best)
 - 🎨 Multiple color themes (Catppuccin, Dracula, GitHub, Peppermint, and more)
 - 📦 No authentication needed - uses public APIs
 - 💾 Smart caching with SQLite
@@ -39,9 +42,10 @@ go build
 
 1. Subscribe to some feeds:
 ```bash
-# Add Reddit subreddits
+# Add Reddit subreddits (defaults to 'best' sort)
 snoo sub add golang
-snoo sub add programming
+snoo sub add programming:hot
+snoo sub add rust:new
 
 # Add RSS feeds
 snoo sub rss https://example.com/feed.xml
@@ -69,8 +73,14 @@ snoo theme catppuccin
 
 Subscribe to a feed:
 ```bash
-# Reddit subreddit
-snoo sub add <subreddit-name>
+# Reddit subreddit (with optional sort)
+snoo sub add <subreddit-name>[:sort]
+# Examples:
+snoo sub add golang          # defaults to 'best'
+snoo sub add golang:hot      # hot posts
+snoo sub add golang:new      # new posts
+snoo sub add golang:rising   # rising posts
+snoo sub add golang:top      # top posts
 
 # RSS feed
 snoo sub rss <feed-url>
@@ -125,11 +135,21 @@ Your theme preference is saved and persists across sessions.
 - `j` or `↓` - Move down
 - `k` or `↑` - Move up
 - `Enter` or `Space` - Open post and load comments
+- `f` - Open filter menu to toggle sources
 - `q` - Quit
+
+### In filter menu:
+- `j` or `↓` - Move down
+- `k` or `↑` - Move up
+- `Space` or `Enter` - Toggle selected source
+- `a` - Enable all sources
+- `d` - Disable all sources
+- `Esc` or `Backspace` - Back to feed
 
 ### In post view:
 - `j` or `↓` - Scroll down
 - `k` or `↑` - Scroll up
+- `r` - Read full article (for link posts)
 - `Esc` or `Backspace` - Back to feed
 - `q` - Quit
 
@@ -145,9 +165,11 @@ Your theme preference is saved and persists across sessions.
 - Pluggable provider architecture for easy extensibility
 - Uses public APIs (no authentication required)
 - Stores subscriptions and cached data in a local SQLite database (`data.sqlite3`)
-- Posts are cached for 1 hour, comments for 30 minutes
-- Old data is automatically cleaned up every 6 hours
+- Posts are cached for 1 hour to reduce API calls
+- Duplicate posts across different sources are automatically deduplicated
+- Filter sources on-the-fly without losing your subscriptions
 - Theme preferences are persisted in the database
+- Article content is extracted and rendered as markdown
 
 ## Tech Stack
 
