@@ -225,7 +225,7 @@ func parseIdentifier(identifier string) (subreddit, sort string) {
 	return subreddit, sort
 }
 
-func parsePost(data map[string]interface{}, subreddit string) feed.Post {
+func parsePost(data map[string]any, identifier string) feed.Post {
 	id, _ := data["id"].(string)
 	title, _ := data["title"].(string)
 	author, _ := data["author"].(string)
@@ -244,11 +244,14 @@ func parsePost(data map[string]interface{}, subreddit string) feed.Post {
 		content = selftext
 	}
 
+	subreddit, sort := parseIdentifier(identifier)
+	sourceName := fmt.Sprintf("r/%s:%s", subreddit, sort)
+
 	return feed.Post{
 		ID:          id,
 		Title:       title,
 		Author:      author,
-		SourceName:  fmt.Sprintf("r/%s", subreddit),
+		SourceName:  sourceName,
 		SourceType:  "reddit",
 		Permalink:   permalink,
 		URL:         url,
