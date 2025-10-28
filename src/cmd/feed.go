@@ -40,10 +40,18 @@ type articleLoadedMsg struct {
 	err     error
 }
 
+type postKey struct {
+	typ string
+	id  string
+}
+
 type model struct {
 	posts           []Post
+	allPosts        []Post
 	cursor          int
 	viewing         bool
+	filtering       bool
+	filterCursor    int
 	selected        int
 	width           int
 	height          int
@@ -53,6 +61,8 @@ type model struct {
 	ctx             context.Context
 	viewport        viewport.Model
 	ready           bool
+	sources         []string
+	sourceEnabled   map[string]bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -95,7 +105,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoTop()
 
 	case tea.KeyMsg:
-		if m.viewing {
+		if m.filtering {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.filtering = false
+				m.filterCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.filterCursor > 0 {
+					m.filterCursor--
+				}
+			case "down", "j":
+				if m.filterCursor < len(m.sources)-1 {
+					m.filterCursor++
+				}
+			case "enter", " ":
+				source := m.sources[m.filterCursor]
+				m.sourceEnabled[source] = !m.sourceEnabled[source]
+				m.applyFilters()
+				return m, nil
+			case "a":
+				for _, source := range m.sources {
+					m.sourceEnabled[source] = true
+				}
+				m.applyFilters()
+				return m, nil
+			case "d":
+				for _, source := range m.sources {
+					m.sourceEnabled[source] = false
+				}
+				m.applyFilters()
+				return m, nil
+			}
+		} else if m.viewing {
 			switch msg.String() {
 			case "q", "esc", "backspace":
 				m.viewing = false
@@ -124,6 +166,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "q", "ctrl+c":
 				return m, tea.Quit
+			case "f":
+				m.filtering = true
+				m.filterCursor = 0
+				return m, nil
 			case "up", "k":
 				if m.cursor > 0 {
 					m.cursor--
@@ -152,11 +198,71 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) applyFilters() {
+	m.posts = m.posts[:0]
+	for i := range m.allPosts {
+		if m.sourceEnabled[m.allPosts[i].SourceName] {
+			m.posts = append(m.posts, m.allPosts[i])
+		}
+	}
+	if m.cursor >= len(m.posts) {
+		m.cursor = len(m.posts) - 1
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+	}
+}
+
 func (m model) View() string {
+	if m.filtering {
+		return m.viewFilter()
+	}
 	if m.viewing {
 		return m.viewPost()
 	}
 	return m.viewList()
+}
+
+func (m model) viewFilter() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Filter Sources"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Toggle sources on/off"))
+	b.WriteString("\n\n")
+
+	for i, src := range m.sources {
+		box := "○"
+		if m.sourceEnabled[src] {
+			box = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", box, src)
+		if i == m.filterCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("space"))
+	b.WriteString(dimStyle.Render(" toggle  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("a"))
+	b.WriteString(dimStyle.Render(" all  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("d"))
+	b.WriteString(dimStyle.Render(" none  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
 }
 
 func (m model) viewList() string {
@@ -255,6 +361,8 @@ func (m model) viewList() string {
 		dimStyle.Render(" navigate  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("enter") +
 		dimStyle.Render(" read  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
+		dimStyle.Render(" filter  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return s + helpText
@@ -377,41 +485,40 @@ func getThreadColor(depth int) lipgloss.Color {
 	return lipgloss.Color(colors[depth%len(colors)])
 }
 
-func renderComment(comment Comment, maxWidth int) string {
-	var s strings.Builder
+func renderComment(c Comment, w int) string {
+	var b strings.Builder
 
-	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C6C6C"))
+	meta := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C6C6C"))
 
-	indent := ""
-	for i := 0; i < comment.Depth; i++ {
-		color := getThreadColor(i)
-		style := lipgloss.NewStyle().Foreground(color)
-		indent += style.Render("│ ")
+	var indent strings.Builder
+	for i := 0; i < c.Depth; i++ {
+		indent.WriteString(lipgloss.NewStyle().Foreground(getThreadColor(i)).Render("│ "))
+	}
+	ind := indent.String()
+
+	b.WriteString(ind)
+	b.WriteString(meta.Render(c.Author))
+	b.WriteString(" ")
+	b.WriteString(meta.Render(fmt.Sprintf("↑%d", c.Score)))
+	b.WriteString("\n")
+
+	body := renderMarkdown(c.Body, w-(c.Depth*2))
+	lines := strings.SplitSeq(body, "\n")
+	for line := range lines {
+		b.WriteString(ind)
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
 
-	s.WriteString(indent)
-	s.WriteString(metaStyle.Render(comment.Author))
-	s.WriteString(" ")
-	s.WriteString(metaStyle.Render(fmt.Sprintf("↑%d", comment.Score)))
-	s.WriteString("\n")
-
-	rendered := renderMarkdown(comment.Body, maxWidth-(comment.Depth*2))
-	bodyLines := strings.SplitSeq(rendered, "\n")
-	for line := range bodyLines {
-		s.WriteString(indent)
-		s.WriteString(line)
-		s.WriteString("\n")
-	}
-
-	if len(comment.Replies) > 0 {
-		for _, reply := range comment.Replies {
-			s.WriteString(renderComment(reply, maxWidth))
+	if len(c.Replies) > 0 {
+		for i := range c.Replies {
+			b.WriteString(renderComment(c.Replies[i], w))
 		}
-	} else if comment.Depth == 0 {
-		s.WriteString("\n")
+	} else if c.Depth == 0 {
+		b.WriteString("\n")
 	}
 
-	return s.String()
+	return b.String()
 }
 
 var feedCmd = &cobra.Command{
@@ -455,6 +562,17 @@ var feedCmd = &cobra.Command{
 			}
 		}
 
+		seen := make(map[postKey]bool, len(posts))
+		deduped := make([]Post, 0, len(posts))
+		for i := range posts {
+			k := postKey{posts[i].SourceType, posts[i].ID}
+			if !seen[k] {
+				seen[k] = true
+				deduped = append(deduped, posts[i])
+			}
+		}
+		posts = deduped
+
 		sort.Slice(posts, func(i, j int) bool {
 			if posts[i].Score > 0 && posts[j].Score > 0 {
 				return posts[i].Score > posts[j].Score
@@ -462,7 +580,30 @@ var feedCmd = &cobra.Command{
 			return posts[i].CreatedUTC > posts[j].CreatedUTC
 		})
 
-		p := tea.NewProgram(model{posts: posts, ctx: cmd.Context()}, tea.WithAltScreen())
+		srcSet := make(map[string]bool, 10)
+		for i := range posts {
+			srcSet[posts[i].SourceName] = true
+		}
+		srcs := make([]string, 0, len(srcSet))
+		for src := range srcSet {
+			srcs = append(srcs, src)
+		}
+		sort.Strings(srcs)
+
+		srcEnabled := make(map[string]bool, len(srcs))
+		for i := range srcs {
+			srcEnabled[srcs[i]] = true
+		}
+
+		m := model{
+			posts:         posts,
+			allPosts:      posts,
+			ctx:           cmd.Context(),
+			sources:       srcs,
+			sourceEnabled: srcEnabled,
+		}
+
+		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error: %v", err)
 		}
@@ -470,7 +611,6 @@ var feedCmd = &cobra.Command{
 }
 
 func truncate(s string, maxLen int) string {
-	// Decode HTML entities first
 	s = html.UnescapeString(s)
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len(s) <= maxLen {
@@ -480,7 +620,6 @@ func truncate(s string, maxLen int) string {
 }
 
 func wrapText(text string, width int) string {
-	// Decode HTML entities first
 	text = html.UnescapeString(text)
 
 	if width <= 0 {
@@ -529,7 +668,6 @@ func renderMarkdown(text string, width int) string {
 		return ""
 	}
 
-	// Decode HTML entities like &amp; -> &, &lt; -> <, etc.
 	text = html.UnescapeString(text)
 
 	r, err := glamour.NewTermRenderer(
