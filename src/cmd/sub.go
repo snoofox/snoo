@@ -30,9 +30,9 @@ var subListCmd = &cobra.Command{
 		if len(sources) == 0 {
 			fmt.Println("No subscribed sources")
 			fmt.Println("\nAvailable commands:")
-			fmt.Println("  snoo sub add <subreddit>       - Subscribe to a subreddit")
-			fmt.Println("  snoo sub rss <url>             - Subscribe to an RSS feed")
-			fmt.Println("  snoo sub lobsters <category>   - Subscribe to Lobsters (active or recent)")
+			fmt.Println("  snoo sub add <subreddit:sort>  - Subscribe to a subreddit (hot, new, rising, top, best)")
+			fmt.Println("  snoo sub rss <url>               - Subscribe to an RSS feed")
+			fmt.Println("  snoo sub lobsters <category>     - Subscribe to Lobsters (active or recent)")
 			fmt.Println("  snoo sub hn <category>         - Subscribe to HackerNews (top, new, best, ask, show, job)")
 			return
 		}
@@ -49,21 +49,30 @@ var subListCmd = &cobra.Command{
 }
 
 var subAddCmd = &cobra.Command{
-	Use:   "add SUBREDDIT",
-	Short: "Subscribe to a subreddit",
-	Args:  cobra.ExactArgs(1),
+	Use:   "add SUBREDDIT[:SORT]",
+	Short: "Subscribe to a subreddit (sort: hot, new, rising, top, best)",
+	Long: `Subscribe to a subreddit with optional sort type.
+
+Examples:
+  snoo sub add golang          # defaults to 'best'
+  snoo sub add golang:hot      # hot posts
+  snoo sub add golang:new      # new posts
+  snoo sub add golang:rising   # rising posts
+  snoo sub add golang:top      # top posts`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := cmd.Context()
 		database := db.FromContext(ctx)
 		manager := feed.NewManager(database)
 
-		fmt.Printf("Subscribing to r/%s...\n", args[0])
-		if err := manager.Subscribe(ctx, "reddit", args[0]); err != nil {
+		identifier := args[0]
+		fmt.Printf("Subscribing to r/%s...\n", identifier)
+		if err := manager.Subscribe(ctx, "reddit", identifier); err != nil {
 			fmt.Printf("Error: %v\n", err)
 			return
 		}
 
-		fmt.Printf("Successfully subscribed to r/%s\n", args[0])
+		fmt.Printf("Successfully subscribed to r/%s\n", identifier)
 	},
 }
 
