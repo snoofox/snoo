@@ -33,6 +33,7 @@ var subListCmd = &cobra.Command{
 			fmt.Println("  snoo sub add <subreddit>       - Subscribe to a subreddit")
 			fmt.Println("  snoo sub rss <url>             - Subscribe to an RSS feed")
 			fmt.Println("  snoo sub lobsters <category>   - Subscribe to Lobsters (active or recent)")
+			fmt.Println("  snoo sub hn <category>         - Subscribe to HackerNews (top, new, best, ask, show, job)")
 			return
 		}
 
@@ -110,6 +111,40 @@ var lobstersAddCmd = &cobra.Command{
 	},
 }
 
+var hnAddCmd = &cobra.Command{
+	Use:   "hn CATEGORY",
+	Short: "Subscribe to HackerNews (top, new, best, ask, show, job)",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := cmd.Context()
+		database := db.FromContext(ctx)
+		manager := feed.NewManager(database)
+
+		category := args[0]
+		validCategories := []string{"top", "new", "best", "ask", "show", "job"}
+		valid := false
+		for _, v := range validCategories {
+			if category == v {
+				valid = true
+				break
+			}
+		}
+
+		if !valid {
+			fmt.Println("Error: category must be one of: top, new, best, ask, show, job")
+			return
+		}
+
+		fmt.Printf("Subscribing to HackerNews %s...\n", category)
+		if err := manager.Subscribe(ctx, "hackernews", category); err != nil {
+			fmt.Printf("Error: %v\n", err)
+			return
+		}
+
+		fmt.Printf("Successfully subscribed to HackerNews %s\n", category)
+	},
+}
+
 var subRmCmd = &cobra.Command{
 	Use:   "rm ID",
 	Short: "Unsubscribe from a source",
@@ -135,5 +170,5 @@ var subRmCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(subCmd)
-	subCmd.AddCommand(subListCmd, subAddCmd, rssAddCmd, lobstersAddCmd, subRmCmd)
+	subCmd.AddCommand(subListCmd, subAddCmd, rssAddCmd, lobstersAddCmd, hnAddCmd, subRmCmd)
 }

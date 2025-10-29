@@ -282,7 +282,7 @@ func (m model) viewList() string {
 func (m model) loadCommentsCmd() tea.Cmd {
 	return func() tea.Msg {
 		post := m.posts[m.selected]
-		if post.SourceType == "reddit" || post.SourceType == "lobsters" {
+		if post.SourceType == "reddit" || post.SourceType == "lobsters" || post.SourceType == "hackernews" {
 			database := db.FromContext(m.ctx)
 			manager := feed.NewManager(database)
 
@@ -364,7 +364,7 @@ func (m model) renderPostContent() string {
 		}
 	}
 
-	if post.SourceType == "reddit" || post.SourceType == "lobsters" {
+	if post.SourceType == "reddit" || post.SourceType == "lobsters" || post.SourceType == "hackernews" {
 		s += "\n" + dimStyle.Render(fmt.Sprintf("─── %d comments ───", post.NumComments)) + "\n\n"
 
 		if m.loadingComments {

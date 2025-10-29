@@ -13,9 +13,9 @@ A terminal-based universal feed reader built with Go
 
 ## Features
 
-- 🌐 Multi-provider support - Reddit, RSS feeds, Lobsters, and more coming soon
+- 🌐 Multi-provider support - Reddit, RSS feeds, Lobsters, HackerNews, and more coming soon
 - 📰 Browse posts from all your subscribed sources in one unified feed
-- 💬 Read comments with threaded replies and colored thread indicators (Reddit)
+- 💬 Read comments with threaded replies and colored thread indicators
 - 🎨 Multiple color themes (Catppuccin, Dracula, GitHub, Peppermint, and more)
 - 📦 No authentication needed - uses public APIs
 - 💾 Smart caching with SQLite
@@ -49,6 +49,10 @@ snoo sub rss https://example.com/feed.xml
 # Add Lobsters
 snoo sub lobsters active
 snoo sub lobsters recent
+
+# Add HackerNews
+snoo sub hn top
+snoo sub hn best
 ```
 
 2. View your unified feed:
@@ -77,6 +81,9 @@ snoo sub rss <feed-url>
 
 # Lobsters (active or recent)
 snoo sub lobsters <category>
+
+# HackerNews (top, new, best, ask, show, job)
+snoo sub hn <category>
 ```
 
 List your subscriptions:
@@ -138,7 +145,7 @@ Your theme preference is saved and persists across sessions.
 - **Reddit** - Browse subreddits, read threaded comments
 - **RSS** - Subscribe to any RSS/Atom feed
 - **Lobsters** - Browse active or recent posts from lobste.rs
-- **More coming soon** - 4chan and other platforms planned
+- **HackerNews** - Browse top, new, best, ask, show, and job stories with threaded comments
 
 ## How it works
 
