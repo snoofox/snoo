@@ -133,7 +133,7 @@ func (m *Manager) Subscribe(ctx context.Context, providerType, identifier string
 
 	source := &db.Source{
 		Type:        providerType,
-		Identifier:  identifier,
+		Identifier:  metadata.Name,
 		Name:        metadata.Name,
 		DisplayName: metadata.DisplayName,
 		Description: metadata.Description,
