@@ -45,13 +45,29 @@ type postKey struct {
 	id  string
 }
 
+type sortOption struct {
+	name string
+	key  string
+}
+
+var sortOptions = []sortOption{
+	{name: "Most Upvotes", key: "upvotes_desc"},
+	{name: "Least Upvotes", key: "upvotes_asc"},
+	{name: "Newest First", key: "newest"},
+	{name: "Oldest First", key: "oldest"},
+	{name: "Most Comments", key: "comments_desc"},
+	{name: "Least Comments", key: "comments_asc"},
+}
+
 type model struct {
 	posts           []Post
 	allPosts        []Post
 	cursor          int
 	viewing         bool
 	filtering       bool
+	sorting         bool
 	filterCursor    int
+	sortCursor      int
 	selected        int
 	width           int
 	height          int
@@ -63,6 +79,7 @@ type model struct {
 	ready           bool
 	sources         []string
 	sourceEnabled   map[string]bool
+	currentSort     string
 }
 
 func (m model) Init() tea.Cmd {
@@ -105,7 +122,29 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoTop()
 
 	case tea.KeyMsg:
-		if m.filtering {
+		if m.sorting {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.sorting = false
+				m.sortCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.sortCursor > 0 {
+					m.sortCursor--
+				}
+			case "down", "j":
+				if m.sortCursor < len(sortOptions)-1 {
+					m.sortCursor++
+				}
+			case "enter", " ":
+				m.currentSort = sortOptions[m.sortCursor].key
+				m.applySorting()
+				m.sorting = false
+				m.sortCursor = 0
+				m.savePreferences()
+				return m, nil
+			}
+		} else if m.filtering {
 			switch msg.String() {
 			case "q", "esc", "backspace":
 				m.filtering = false
@@ -123,18 +162,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				source := m.sources[m.filterCursor]
 				m.sourceEnabled[source] = !m.sourceEnabled[source]
 				m.applyFilters()
+				m.savePreferences()
 				return m, nil
 			case "a":
 				for _, source := range m.sources {
 					m.sourceEnabled[source] = true
 				}
 				m.applyFilters()
+				m.savePreferences()
 				return m, nil
 			case "d":
 				for _, source := range m.sources {
 					m.sourceEnabled[source] = false
 				}
 				m.applyFilters()
+				m.savePreferences()
 				return m, nil
 			}
 		} else if m.viewing {
@@ -169,6 +211,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "f":
 				m.filtering = true
 				m.filterCursor = 0
+				return m, nil
+			case "s":
+				m.sorting = true
+				m.sortCursor = 0
 				return m, nil
 			case "up", "k":
 				if m.cursor > 0 {
@@ -205,6 +251,7 @@ func (m *model) applyFilters() {
 			m.posts = append(m.posts, m.allPosts[i])
 		}
 	}
+	m.applySorting()
 	if m.cursor >= len(m.posts) {
 		m.cursor = len(m.posts) - 1
 		if m.cursor < 0 {
@@ -213,7 +260,103 @@ func (m *model) applyFilters() {
 	}
 }
 
+func (m *model) applySorting() {
+	switch m.currentSort {
+	case "upvotes_desc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].Score > m.posts[j].Score
+		})
+	case "upvotes_asc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].Score < m.posts[j].Score
+		})
+	case "newest":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].CreatedUTC > m.posts[j].CreatedUTC
+		})
+	case "oldest":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].CreatedUTC < m.posts[j].CreatedUTC
+		})
+	case "comments_desc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].NumComments > m.posts[j].NumComments
+		})
+	case "comments_asc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].NumComments < m.posts[j].NumComments
+		})
+	default:
+		// Default: smart sort (upvotes if available, otherwise newest)
+		sort.Slice(m.posts, func(i, j int) bool {
+			if m.posts[i].Score > 0 && m.posts[j].Score > 0 {
+				return m.posts[i].Score > m.posts[j].Score
+			}
+			return m.posts[i].CreatedUTC > m.posts[j].CreatedUTC
+		})
+	}
+}
+
+func (m *model) savePreferences() {
+	database := db.FromContext(m.ctx)
+	if database == nil {
+		return
+	}
+
+	// Save sorting preference
+	if m.currentSort != "" {
+		db.SetSetting(database, "feed_sort", m.currentSort)
+	}
+
+	// Save enabled sources as comma-separated list
+	var enabledSources []string
+	for _, src := range m.sources {
+		if m.sourceEnabled[src] {
+			enabledSources = append(enabledSources, src)
+		}
+	}
+	if len(enabledSources) > 0 {
+		db.SetSetting(database, "feed_sources", strings.Join(enabledSources, ","))
+	}
+}
+
+func loadPreferences(ctx context.Context, sources []string) (string, map[string]bool) {
+	database := db.FromContext(ctx)
+	sourceEnabled := make(map[string]bool, len(sources))
+
+	for _, src := range sources {
+		sourceEnabled[src] = true
+	}
+
+	if database == nil {
+		return "upvotes_desc", sourceEnabled
+	}
+
+	sortPref, err := db.GetSetting(database, "feed_sort")
+	if err != nil || sortPref == "" {
+		sortPref = "upvotes_desc"
+	}
+
+	sourcesStr, err := db.GetSetting(database, "feed_sources")
+	if err == nil && sourcesStr != "" {
+		enabledList := strings.Split(sourcesStr, ",")
+		for _, src := range sources {
+			sourceEnabled[src] = false
+		}
+		for _, enabled := range enabledList {
+			if _, exists := sourceEnabled[enabled]; exists {
+				sourceEnabled[enabled] = true
+			}
+		}
+	}
+
+	return sortPref, sourceEnabled
+}
+
 func (m model) View() string {
+	if m.sorting {
+		return m.viewSort()
+	}
 	if m.filtering {
 		return m.viewFilter()
 	}
@@ -221,6 +364,44 @@ func (m model) View() string {
 		return m.viewPost()
 	}
 	return m.viewList()
+}
+
+func (m model) viewSort() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Sort Posts"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Choose sorting order"))
+	b.WriteString("\n\n")
+
+	for i, opt := range sortOptions {
+		indicator := " "
+		if opt.key == m.currentSort {
+			indicator = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", indicator, opt.name)
+		if i == m.sortCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("enter"))
+	b.WriteString(dimStyle.Render(" select  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
 }
 
 func (m model) viewFilter() string {
@@ -363,6 +544,8 @@ func (m model) viewList() string {
 		dimStyle.Render(" read  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
 		dimStyle.Render(" filter  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s") +
+		dimStyle.Render(" sort  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return s + helpText
@@ -573,13 +756,6 @@ var feedCmd = &cobra.Command{
 		}
 		posts = deduped
 
-		sort.Slice(posts, func(i, j int) bool {
-			if posts[i].Score > 0 && posts[j].Score > 0 {
-				return posts[i].Score > posts[j].Score
-			}
-			return posts[i].CreatedUTC > posts[j].CreatedUTC
-		})
-
 		srcSet := make(map[string]bool, 10)
 		for i := range posts {
 			srcSet[posts[i].SourceName] = true
@@ -590,10 +766,8 @@ var feedCmd = &cobra.Command{
 		}
 		sort.Strings(srcs)
 
-		srcEnabled := make(map[string]bool, len(srcs))
-		for i := range srcs {
-			srcEnabled[srcs[i]] = true
-		}
+		// Load saved preferences
+		sortPref, srcEnabled := loadPreferences(cmd.Context(), srcs)
 
 		m := model{
 			posts:         posts,
@@ -601,7 +775,11 @@ var feedCmd = &cobra.Command{
 			ctx:           cmd.Context(),
 			sources:       srcs,
 			sourceEnabled: srcEnabled,
+			currentSort:   sortPref,
 		}
+
+		// Apply initial filters and sorting
+		m.applyFilters()
 
 		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
