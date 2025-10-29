@@ -95,6 +95,9 @@ type model struct {
 	sourceEnabled      map[string]bool
 	currentSort        string
 	currentCommentSort string
+	originalContent    string
+	articleContent     string
+	showingArticle     bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -127,12 +130,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case articleLoadedMsg:
 		if msg.err != nil {
 			debug.Log("Failed to load article: %v", msg.err)
-			m.posts[m.selected].Content = fmt.Sprintf("Failed to load article: %v", msg.err)
+			m.articleContent = fmt.Sprintf("Failed to load article: %v", msg.err)
 		} else if msg.content != "" {
-			m.posts[m.selected].Content = msg.content
+			m.articleContent = msg.content
 		} else {
-			m.posts[m.selected].Content = "No content could be extracted from this article."
+			m.articleContent = "No content could be extracted from this article."
 		}
+		m.showingArticle = true
 		m.loadingArticle = false
 		m.viewport.SetContent(m.renderPostContent())
 		m.viewport.GotoTop()
@@ -226,6 +230,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.comments = nil
 				m.loadingComments = false
 				m.loadingArticle = false
+				m.originalContent = ""
+				m.articleContent = ""
+				m.showingArticle = false
 				return m, nil
 			case "s":
 				if len(m.comments) > 0 {
@@ -236,10 +243,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "r":
 				if !m.loadingArticle {
 					post := m.posts[m.selected]
-					if post.URL != "" && post.Content == "" {
-						m.loadingArticle = true
-						m.viewport.SetContent(m.renderPostContent())
-						return m, m.loadArticleCmd()
+					if post.URL != "" {
+						// If we already have article content, toggle between original and article
+						if m.articleContent != "" {
+							m.showingArticle = !m.showingArticle
+							m.viewport.SetContent(m.renderPostContent())
+							m.viewport.GotoTop()
+						} else {
+							// First time fetching article, save original content
+							m.originalContent = post.Content
+							m.loadingArticle = true
+							m.viewport.SetContent(m.renderPostContent())
+							return m, m.loadArticleCmd()
+						}
 					}
 				}
 				return m, nil
@@ -275,6 +291,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewing = true
 				m.loadingComments = true
 				m.comments = nil
+				m.originalContent = ""
+				m.articleContent = ""
+				m.showingArticle = false
 				m.viewport.SetContent(m.renderPostContent())
 				m.viewport.GotoTop()
 				return m, m.loadCommentsCmd()
@@ -688,7 +707,7 @@ func (m model) viewList() string {
 func (m model) loadCommentsCmd() tea.Cmd {
 	return func() tea.Msg {
 		post := m.posts[m.selected]
-		if post.SourceType == "reddit" || post.SourceType == "lobsters" {
+		if post.SourceType == "reddit" || post.SourceType == "lobsters" || post.SourceType == "hackernews" {
 			database := db.FromContext(m.ctx)
 			manager := feed.NewManager(database)
 
@@ -751,8 +770,17 @@ func (m model) renderPostContent() string {
 
 	if m.loadingArticle {
 		s += dimStyle.Render("Loading article...") + "\n"
-	} else if post.Content != "" {
-		rendered := renderMarkdown(post.Content, maxWidth)
+	} else if m.showingArticle && m.articleContent != "" {
+		// Show fetched article content
+		rendered := renderMarkdown(m.articleContent, maxWidth)
+		s += rendered + "\n"
+	} else if post.Content != "" || m.originalContent != "" {
+		// Show original content (either from post or saved original)
+		content := post.Content
+		if m.originalContent != "" {
+			content = m.originalContent
+		}
+		rendered := renderMarkdown(content, maxWidth)
 		s += rendered + "\n"
 	} else {
 		s += urlStyle.Render(post.URL) + "\n"
@@ -761,7 +789,7 @@ func (m model) renderPostContent() string {
 		}
 	}
 
-	if post.SourceType == "reddit" || post.SourceType == "lobsters" {
+	if post.SourceType == "reddit" || post.SourceType == "lobsters" || post.SourceType == "hackernews" {
 		s += "\n" + dimStyle.Render(fmt.Sprintf("─── %d comments ───", post.NumComments)) + "\n\n"
 
 		if m.loadingComments {
@@ -781,8 +809,16 @@ func (m model) renderPostContent() string {
 func (m model) viewPost() string {
 	post := m.posts[m.selected]
 	helpText := "j/k or ↑/↓: scroll"
-	if post.URL != "" && post.Content == "" && !m.loadingArticle {
-		helpText += " • r: read article"
+	if post.URL != "" && !m.loadingArticle {
+		if m.articleContent != "" {
+			if m.showingArticle {
+				helpText += " • r: show original"
+			} else {
+				helpText += " • r: show article"
+			}
+		} else {
+			helpText += " • r: read article"
+		}
 	}
 	if len(m.comments) > 0 {
 		helpText += " • s: sort comments"
