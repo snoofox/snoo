@@ -36,6 +36,7 @@ type Post struct {
 	Thumbnail       string  `gorm:"size:512"`
 	NSFW            bool
 	CommentsFetchAt *time.Time
+	ReadAt          *time.Time `gorm:"index"`
 }
 
 type Comment struct {
