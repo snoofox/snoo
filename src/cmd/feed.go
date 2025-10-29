@@ -259,6 +259,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
+			case "g":
+				m.viewport.GotoTop()
+				return m, nil
+			case "G":
+				m.viewport.GotoBottom()
+				return m, nil
 			case "up", "k":
 				m.viewport, cmd = m.viewport.Update(msg)
 				return m, cmd
