@@ -133,7 +133,7 @@ func (m *Manager) Subscribe(ctx context.Context, providerType, identifier string
 
 	source := &db.Source{
 		Type:        providerType,
-		Identifier:  identifier,
+		Identifier:  metadata.Name,
 		Name:        metadata.Name,
 		DisplayName: metadata.DisplayName,
 		Description: metadata.Description,
@@ -180,6 +180,19 @@ func (m *Manager) FetchComments(ctx context.Context, post Post) ([]Comment, erro
 	return provider.FetchComments(ctx, post)
 }
 
+func (m *Manager) MarkAsRead(ctx context.Context, sourceType, externalID string) error {
+	now := time.Now()
+	result := m.db.Model(&db.Post{}).
+		Where("source_type = ? AND external_id = ?", sourceType, externalID).
+		Update("read_at", now)
+
+	if result.Error != nil {
+		return fmt.Errorf("failed to mark post as read: %w", result.Error)
+	}
+
+	return nil
+}
+
 func dbSourceToFeedSource(s db.Source) Source {
 	return Source{
 		ID:          s.ID,
@@ -194,6 +207,11 @@ func dbSourceToFeedSource(s db.Source) Source {
 }
 
 func dbPostToFeedPost(p db.Post) Post {
+	var readAt *time.Time
+	if p.ReadAt != nil {
+		readAt = p.ReadAt
+	}
+
 	return Post{
 		ID:          p.ExternalID,
 		Title:       p.Title,
@@ -208,6 +226,7 @@ func dbPostToFeedPost(p db.Post) Post {
 		Content:     p.Content,
 		Thumbnail:   p.Thumbnail,
 		NSFW:        p.NSFW,
+		ReadAt:      readAt,
 	}
 }
 

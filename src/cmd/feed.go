@@ -3,13 +3,11 @@ package cmd
 import (
 	"context"
 	"fmt"
-	"html"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/snoofox/snoo/src/article"
 	"github.com/snoofox/snoo/src/db"
@@ -259,6 +257,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					}
 				}
 				return m, nil
+			case "g":
+				m.viewport.GotoTop()
+				return m, nil
+			case "G":
+				m.viewport.GotoBottom()
+				return m, nil
 			case "up", "k":
 				m.viewport, cmd = m.viewport.Update(msg)
 				return m, cmd
@@ -296,6 +300,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showingArticle = false
 				m.viewport.SetContent(m.renderPostContent())
 				m.viewport.GotoTop()
+
+				post := m.posts[m.selected]
+				if !post.IsRead {
+					m.posts[m.selected].IsRead = true
+					go m.markPostAsRead(post)
+				}
+
 				return m, m.loadCommentsCmd()
 			}
 		}
@@ -637,7 +648,7 @@ func (m model) viewList() string {
 			if post.NSFW {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
-			sub := subredditStyle.Render(post.SourceName)
+			sub := subredditStyle.Render(displaySourceName(post.SourceName))
 
 			metadata := ""
 			sep := separatorStyle.Render("•")
@@ -664,7 +675,7 @@ func (m model) viewList() string {
 			if post.NSFW {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
-			sub := subredditStyle.Render(post.SourceName)
+			sub := subredditStyle.Render(displaySourceName(post.SourceName))
 
 			metadata := ""
 			sep := separatorStyle.Render("•")
@@ -680,7 +691,12 @@ func (m model) viewList() string {
 				metadata += commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
 			}
 
-			s += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB")).Render(titleText) + "\n"
+			titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
+			if post.IsRead {
+				titleStyle = dimStyle
+			}
+
+			s += "   " + titleStyle.Render(titleText) + "\n"
 			if metadata != "" {
 				s += "   " + nsfw + sub + " " + sep + " " + metadata + "\n\n"
 			} else {
@@ -693,12 +709,10 @@ func (m model) viewList() string {
 	helpText := dimStyle.Render("  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k") +
 		dimStyle.Render(" navigate  ") +
-		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("enter") +
-		dimStyle.Render(" read  ") +
-		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
-		dimStyle.Render(" filter  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s") +
 		dimStyle.Render(" sort  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
+		dimStyle.Render(" filter  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return s + helpText
@@ -743,6 +757,18 @@ func (m model) loadArticleCmd() tea.Cmd {
 	}
 }
 
+func (m *model) markPostAsRead(post Post) {
+	database := db.FromContext(m.ctx)
+	if database == nil {
+		return
+	}
+
+	manager := feed.NewManager(database)
+	if err := manager.MarkAsRead(m.ctx, post.SourceType, post.ID); err != nil {
+		debug.Log("Failed to mark post as read: %v", err)
+	}
+}
+
 func convertComment(c feed.Comment) Comment {
 	replies := make([]Comment, len(c.Replies))
 	for i, r := range c.Replies {
@@ -771,11 +797,9 @@ func (m model) renderPostContent() string {
 	if m.loadingArticle {
 		s += dimStyle.Render("Loading article...") + "\n"
 	} else if m.showingArticle && m.articleContent != "" {
-		// Show fetched article content
 		rendered := renderMarkdown(m.articleContent, maxWidth)
 		s += rendered + "\n"
 	} else if post.Content != "" || m.originalContent != "" {
-		// Show original content (either from post or saved original)
 		content := post.Content
 		if m.originalContent != "" {
 			content = m.originalContent
@@ -808,37 +832,43 @@ func (m model) renderPostContent() string {
 
 func (m model) viewPost() string {
 	post := m.posts[m.selected]
-	helpText := "j/k or ↑/↓: scroll"
+	theme := GetCurrentTheme()
+
+	var helpParts []string
+	helpParts = append(helpParts,
+		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k")+
+			dimStyle.Render(" scroll"))
+
 	if post.URL != "" && !m.loadingArticle {
 		if m.articleContent != "" {
 			if m.showingArticle {
-				helpText += " • r: show original"
+				helpParts = append(helpParts,
+					lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+						dimStyle.Render(" show original"))
 			} else {
-				helpText += " • r: show article"
+				helpParts = append(helpParts,
+					lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+						dimStyle.Render(" show article"))
 			}
 		} else {
-			helpText += " • r: read article"
+			helpParts = append(helpParts,
+				lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+					dimStyle.Render(" read article"))
 		}
 	}
-	if len(m.comments) > 0 {
-		helpText += " • s: sort comments"
-	}
-	helpText += " • esc/backspace: back • q: quit"
-	return m.viewport.View() + "\n" + dimStyle.Render(helpText)
-}
 
-func getThreadColor(depth int) lipgloss.Color {
-	colors := []string{
-		"#FF6B6B",
-		"#4ECDC4",
-		"#45B7D1",
-		"#FFA07A",
-		"#98D8C8",
-		"#F7DC6F",
-		"#BB8FCE",
-		"#85C1E2",
+	if len(m.comments) > 0 {
+		helpParts = append(helpParts,
+			lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s")+
+				dimStyle.Render(" sort"))
 	}
-	return lipgloss.Color(colors[depth%len(colors)])
+
+	helpParts = append(helpParts,
+		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("esc")+
+			dimStyle.Render(" back"))
+
+	helpText := dimStyle.Render("  ") + strings.Join(helpParts, dimStyle.Render("  "))
+	return m.viewport.View() + "\n" + helpText
 }
 
 func renderComment(c Comment, w int) string {
@@ -915,6 +945,7 @@ var feedCmd = &cobra.Command{
 				Content:     p.Content,
 				Thumbnail:   p.Thumbnail,
 				NSFW:        p.NSFW,
+				IsRead:      p.ReadAt != nil,
 			}
 		}
 
@@ -958,82 +989,6 @@ var feedCmd = &cobra.Command{
 			fmt.Printf("Error: %v", err)
 		}
 	},
-}
-
-func truncate(s string, maxLen int) string {
-	s = html.UnescapeString(s)
-	s = strings.ReplaceAll(s, "\n", " ")
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen-3] + "..."
-}
-
-func wrapText(text string, width int) string {
-	text = html.UnescapeString(text)
-
-	if width <= 0 {
-		return text
-	}
-
-	var result strings.Builder
-	words := strings.Fields(text)
-	lineLen := 0
-
-	for i, word := range words {
-		wordLen := len(word)
-
-		if lineLen+wordLen+1 > width {
-			if lineLen > 0 {
-				result.WriteString("\n")
-				lineLen = 0
-			}
-
-			if wordLen > width {
-				result.WriteString(word[:width])
-				result.WriteString("\n")
-				continue
-			}
-		}
-
-		if lineLen > 0 {
-			result.WriteString(" ")
-			lineLen++
-		}
-
-		result.WriteString(word)
-		lineLen += wordLen
-
-		if i < len(words)-1 && lineLen+1+len(words[i+1]) > width {
-			result.WriteString("\n")
-			lineLen = 0
-		}
-	}
-
-	return result.String()
-}
-
-func renderMarkdown(text string, width int) string {
-	if text == "" {
-		return ""
-	}
-
-	text = html.UnescapeString(text)
-
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return wrapText(text, width)
-	}
-
-	rendered, err := r.Render(text)
-	if err != nil {
-		return wrapText(text, width)
-	}
-	result := strings.TrimSpace(rendered)
-	return result
 }
 
 func loadSavedTheme(ctx context.Context) {

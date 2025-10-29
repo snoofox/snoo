@@ -87,17 +87,20 @@ Available: default, catppuccin, dracula, github, peppermint
 ### Feed list:
 
 ```
-j/↓ k/↑     move
+j/k         move
 Enter       open post
 f           filter sources
+s           sort posts
 q           quit
 ```
 
 ### Inside post:
 
 ```
-j/↓ k/↑     scroll
+j/k         scroll
+g/G         jump to top/bottom
 r           read full article
+s           sort comments
 Esc         back
 q           quit
 ```
