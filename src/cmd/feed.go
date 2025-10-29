@@ -59,27 +59,42 @@ var sortOptions = []sortOption{
 	{name: "Least Comments", key: "comments_asc"},
 }
 
+type commentSortOption struct {
+	name string
+	key  string
+}
+
+var commentSortOptions = []commentSortOption{
+	{name: "Best (Highest Score)", key: "best"},
+	{name: "Worst (Lowest Score)", key: "worst"},
+	{name: "Newest First", key: "newest"},
+	{name: "Oldest First", key: "oldest"},
+}
+
 type model struct {
-	posts           []Post
-	allPosts        []Post
-	cursor          int
-	viewing         bool
-	filtering       bool
-	sorting         bool
-	filterCursor    int
-	sortCursor      int
-	selected        int
-	width           int
-	height          int
-	comments        []Comment
-	loadingComments bool
-	loadingArticle  bool
-	ctx             context.Context
-	viewport        viewport.Model
-	ready           bool
-	sources         []string
-	sourceEnabled   map[string]bool
-	currentSort     string
+	posts              []Post
+	allPosts           []Post
+	cursor             int
+	viewing            bool
+	filtering          bool
+	sorting            bool
+	commentSorting     bool
+	filterCursor       int
+	sortCursor         int
+	commentSortCursor  int
+	selected           int
+	width              int
+	height             int
+	comments           []Comment
+	loadingComments    bool
+	loadingArticle     bool
+	ctx                context.Context
+	viewport           viewport.Model
+	ready              bool
+	sources            []string
+	sourceEnabled      map[string]bool
+	currentSort        string
+	currentCommentSort string
 }
 
 func (m model) Init() tea.Cmd {
@@ -104,6 +119,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commentsLoadedMsg:
 		m.comments = msg.comments
+		m.applyCommentSorting()
 		m.loadingComments = false
 		m.viewport.SetContent(m.renderPostContent())
 		m.viewport.GotoTop()
@@ -122,7 +138,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoTop()
 
 	case tea.KeyMsg:
-		if m.sorting {
+		if m.commentSorting {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.commentSorting = false
+				m.commentSortCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.commentSortCursor > 0 {
+					m.commentSortCursor--
+				}
+			case "down", "j":
+				if m.commentSortCursor < len(commentSortOptions)-1 {
+					m.commentSortCursor++
+				}
+			case "enter", " ":
+				m.currentCommentSort = commentSortOptions[m.commentSortCursor].key
+				m.applyCommentSorting()
+				m.commentSorting = false
+				m.commentSortCursor = 0
+				m.viewport.SetContent(m.renderPostContent())
+				m.viewport.GotoTop()
+				m.savePreferences()
+				return m, nil
+			}
+		} else if m.sorting {
 			switch msg.String() {
 			case "q", "esc", "backspace":
 				m.sorting = false
@@ -187,6 +227,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loadingComments = false
 				m.loadingArticle = false
 				return m, nil
+			case "s":
+				if len(m.comments) > 0 {
+					m.commentSorting = true
+					m.commentSortCursor = 0
+					return m, nil
+				}
 			case "r":
 				if !m.loadingArticle {
 					post := m.posts[m.selected]
@@ -297,18 +343,60 @@ func (m *model) applySorting() {
 	}
 }
 
+func (m *model) applyCommentSorting() {
+	m.comments = sortComments(m.comments, m.currentCommentSort)
+}
+
+func sortComments(comments []Comment, sortKey string) []Comment {
+	if len(comments) == 0 {
+		return comments
+	}
+
+	sorted := make([]Comment, len(comments))
+	copy(sorted, comments)
+
+	switch sortKey {
+	case "best":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Score > sorted[j].Score
+		})
+	case "worst":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Score < sorted[j].Score
+		})
+	case "newest":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].CreatedAt > sorted[j].CreatedAt
+		})
+	case "oldest":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].CreatedAt < sorted[j].CreatedAt
+		})
+	}
+
+	for i := range sorted {
+		if len(sorted[i].Replies) > 0 {
+			sorted[i].Replies = sortComments(sorted[i].Replies, sortKey)
+		}
+	}
+
+	return sorted
+}
+
 func (m *model) savePreferences() {
 	database := db.FromContext(m.ctx)
 	if database == nil {
 		return
 	}
 
-	// Save sorting preference
 	if m.currentSort != "" {
 		db.SetSetting(database, "feed_sort", m.currentSort)
 	}
 
-	// Save enabled sources as comma-separated list
+	if m.currentCommentSort != "" {
+		db.SetSetting(database, "comment_sort", m.currentCommentSort)
+	}
+
 	var enabledSources []string
 	for _, src := range m.sources {
 		if m.sourceEnabled[src] {
@@ -320,7 +408,7 @@ func (m *model) savePreferences() {
 	}
 }
 
-func loadPreferences(ctx context.Context, sources []string) (string, map[string]bool) {
+func loadPreferences(ctx context.Context, sources []string) (string, string, map[string]bool) {
 	database := db.FromContext(ctx)
 	sourceEnabled := make(map[string]bool, len(sources))
 
@@ -329,12 +417,17 @@ func loadPreferences(ctx context.Context, sources []string) (string, map[string]
 	}
 
 	if database == nil {
-		return "upvotes_desc", sourceEnabled
+		return "upvotes_desc", "best", sourceEnabled
 	}
 
 	sortPref, err := db.GetSetting(database, "feed_sort")
 	if err != nil || sortPref == "" {
 		sortPref = "upvotes_desc"
+	}
+
+	commentSortPref, err := db.GetSetting(database, "comment_sort")
+	if err != nil || commentSortPref == "" {
+		commentSortPref = "best"
 	}
 
 	sourcesStr, err := db.GetSetting(database, "feed_sources")
@@ -350,10 +443,13 @@ func loadPreferences(ctx context.Context, sources []string) (string, map[string]
 		}
 	}
 
-	return sortPref, sourceEnabled
+	return sortPref, commentSortPref, sourceEnabled
 }
 
 func (m model) View() string {
+	if m.commentSorting {
+		return m.viewCommentSort()
+	}
 	if m.sorting {
 		return m.viewSort()
 	}
@@ -364,6 +460,44 @@ func (m model) View() string {
 		return m.viewPost()
 	}
 	return m.viewList()
+}
+
+func (m model) viewCommentSort() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Sort Comments"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Choose comment sorting order"))
+	b.WriteString("\n\n")
+
+	for i, opt := range commentSortOptions {
+		indicator := " "
+		if opt.key == m.currentCommentSort {
+			indicator = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", indicator, opt.name)
+		if i == m.commentSortCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("enter"))
+	b.WriteString(dimStyle.Render(" select  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
 }
 
 func (m model) viewSort() string {
@@ -650,6 +784,9 @@ func (m model) viewPost() string {
 	if post.URL != "" && post.Content == "" && !m.loadingArticle {
 		helpText += " • r: read article"
 	}
+	if len(m.comments) > 0 {
+		helpText += " • s: sort comments"
+	}
 	helpText += " • esc/backspace: back • q: quit"
 	return m.viewport.View() + "\n" + dimStyle.Render(helpText)
 }
@@ -766,19 +903,18 @@ var feedCmd = &cobra.Command{
 		}
 		sort.Strings(srcs)
 
-		// Load saved preferences
-		sortPref, srcEnabled := loadPreferences(cmd.Context(), srcs)
+		sortPref, commentSortPref, srcEnabled := loadPreferences(cmd.Context(), srcs)
 
 		m := model{
-			posts:         posts,
-			allPosts:      posts,
-			ctx:           cmd.Context(),
-			sources:       srcs,
-			sourceEnabled: srcEnabled,
-			currentSort:   sortPref,
+			posts:              posts,
+			allPosts:           posts,
+			ctx:                cmd.Context(),
+			sources:            srcs,
+			sourceEnabled:      srcEnabled,
+			currentSort:        sortPref,
+			currentCommentSort: commentSortPref,
 		}
 
-		// Apply initial filters and sorting
 		m.applyFilters()
 
 		p := tea.NewProgram(m, tea.WithAltScreen())
