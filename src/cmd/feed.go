@@ -999,9 +999,6 @@ func displaySourceName(sourceName string) string {
 	if idx := strings.LastIndex(sourceName, ":"); idx != -1 {
 		sourceName = sourceName[:idx]
 	}
-	if idx := strings.LastIndex(sourceName, "/"); idx != -1 {
-		sourceName = sourceName[:idx]
-	}
 	return sourceName
 }
 
