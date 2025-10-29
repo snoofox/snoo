@@ -709,12 +709,10 @@ func (m model) viewList() string {
 	helpText := dimStyle.Render("  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k") +
 		dimStyle.Render(" navigate  ") +
-		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("enter") +
-		dimStyle.Render(" read  ") +
-		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
-		dimStyle.Render(" filter  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s") +
 		dimStyle.Render(" sort  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
+		dimStyle.Render(" filter  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return s + helpText
