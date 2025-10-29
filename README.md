@@ -1,7 +1,7 @@
 # snoo
 
 <p align="center">
-  <img src="https://i.ibb.co/YTKjHCwq/wmremove-transformed-min.png" alt="snoo gopher" style="max-width: 100%; height: auto;"/>
+  <img src="https://raw.githubusercontent.com/snoofox/snoo/main/assets/space-gopher.png" alt="snoo gopher" style="max-width: 100%; height: auto;"/>
 </p>
 
 A terminal-based universal feed reader built with Go
