@@ -6,9 +6,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var helpCmd = &cobra.Command{
-	Use:   "help",
-	Short: "Show help and navigation keys",
+var manCmd = &cobra.Command{
+	Use:   "man",
+	Short: "Show manual and navigation keys",
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Print(`
 snoo - A terminal feed reader that doesn't suck (yet).
@@ -23,7 +23,7 @@ COMMANDS:
   snoo sub rm <id>           Remove a subscription
   snoo theme <name>          Change theme (default, catppuccin, dracula, github, peppermint)
   snoo clear                 Clear all data
-  snoo help                  Show this help
+  snoo man                   Show manual with navigation keys
 
 NAVIGATION KEYS:
 
@@ -63,5 +63,5 @@ Filter Menu:
 }
 
 func init() {
-	rootCmd.AddCommand(helpCmd)
+	rootCmd.AddCommand(manCmd)
 }
