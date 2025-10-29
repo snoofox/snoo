@@ -1,169 +1,152 @@
 # snoo
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/snoofox/snoo/main/assets/space-gopher.png" alt="snoo gopher" style="max-width: 100%; height: auto;"/>
+  <img src="https://raw.githubusercontent.com/snoofox/snoo/main/assets/space-gopher.png " alt="snoo gopher" style="max-width: 100%; height: auto;"/>
 </p>
 
-A terminal-based universal feed reader built with Go
+A terminal feed reader that doesn't suck (yet).
 
-> ⚠️ **Disclaimer**: This is a vibe-coded project. Don't blame me if it sucks.
-
-## Preview
-![snoo preview](https://raw.githubusercontent.com/snoofox/snoo/main/assets/demo.gif)
-
-## Features
-
-- 🌐 Multi-provider support - Reddit, RSS feeds, Lobsters, HackerNews, and more coming soon
-- 📰 Browse posts from all your subscribed sources in one unified feed
-- 💬 Read comments with threaded replies and colored thread indicators
-- 🎨 Multiple color themes (Catppuccin, Dracula, GitHub, Peppermint, and more)
-- 📦 No authentication needed - uses public APIs
-- 💾 Smart caching with SQLite
-- ⚡ Fast and lightweight
-
-## Installation
+## Install
 
 ```bash
+# needs cgo for sqlite
 CGO_ENABLED=1 go install github.com/snoofox/snoo@latest
 ```
 
-Or build from source:
+Or build yourself:
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/snoofox/snoo
 cd snoo
 go build
 ```
 
-## Quick Start
+## Preview
+![snoo preview](https://raw.githubusercontent.com/snoofox/snoo/main/assets/demo.gif )
 
-1. Subscribe to some feeds:
+## Quick start
+
+Add feeds:
+
 ```bash
-# Add Reddit subreddits
+# reddit
 snoo sub add golang
-snoo sub add programming
+snoo sub add rust:new
+snoo sub add programming:top
 
-# Add RSS feeds
-snoo sub rss https://example.com/feed.xml
+# rss
+snoo sub rss https://lwn.net/headlines/rss
+snoo sub rss https://hnrss.org/frontpage
 
-# Add Lobsters
+# lobsters
 snoo sub lobsters active
-snoo sub lobsters recent
-
-# Add HackerNews
-snoo sub hn top
-snoo sub hn best
 ```
 
-2. View your unified feed:
+Read:
+
 ```bash
 snoo
-# or explicitly
-snoo feed
 ```
 
-3. Change the theme (optional):
+Pick a theme (optional):
+
 ```bash
-snoo theme catppuccin
+snoo theme dracula
 ```
 
 ## Commands
 
-### Managing Subscriptions
+### Manage subscriptions
 
-Subscribe to a feed:
-```bash
-# Reddit subreddit
-snoo sub add <subreddit-name>
-
-# RSS feed
-snoo sub rss <feed-url>
-
-# Lobsters (active or recent)
-snoo sub lobsters <category>
-
-# HackerNews (top, new, best, ask, show, job)
-snoo sub hn <category>
+```
+snoo sub add <subreddit>[:sort]     # reddit
+snoo sub rss <url>                  # any rss/atom
+snoo sub lobsters active|recent     # lobsters
+snoo sub list                       # show all
+snoo sub rm <id>                    # remove one
 ```
 
-List your subscriptions:
-```bash
-snoo sub list
+### View feed
+
 ```
-
-Unsubscribe from a feed:
-```bash
-snoo sub rm <subscription-id> # you can get id from sub list
-```
-
-### Viewing Your Feed
-
-View posts from all subscribed sources:
-```bash
+snoo              # same as 'snoo feed'
 snoo feed
-# or just
-snoo
 ```
 
 ### Themes
 
-List available themes:
-```bash
-snoo theme
+```
+snoo theme        # list
+snoo theme <name> # set
 ```
 
-Change theme:
-```bash
-snoo theme <theme-name>
-```
-
-Available themes:
-- `default` - Original pink/purple theme
-- `catppuccin` - Catppuccin Mocha palette
-- `dracula` - Dracula color scheme
-- `github` - GitHub-inspired colors
-- `peppermint` - Fresh mint and cyan tones
-
-Your theme preference is saved and persists across sessions.
+Available: default, catppuccin, dracula, github, peppermint
 
 ## Navigation
 
-### In feed list:
-- `j` or `↓` - Move down
-- `k` or `↑` - Move up
-- `Enter` or `Space` - Open post and load comments
-- `q` - Quit
+### Feed list:
 
-### In post view:
-- `j` or `↓` - Scroll down
-- `k` or `↑` - Scroll up
-- `Esc` or `Backspace` - Back to feed
-- `q` - Quit
+```
+j/↓ k/↑     move
+Enter       open post
+f           filter sources
+q           quit
+```
 
-## Supported Providers
+### Inside post:
 
-- **Reddit** - Browse subreddits, read threaded comments
-- **RSS** - Subscribe to any RSS/Atom feed
-- **Lobsters** - Browse active or recent posts from lobste.rs
-- **HackerNews** - Browse top, new, best, ask, show, and job stories with threaded comments
+```
+j/↓ k/↑     scroll
+r           read full article
+Esc         back
+q           quit
+```
 
-## How it works
+### Filter menu:
 
-- Pluggable provider architecture for easy extensibility
-- Uses public APIs (no authentication required)
-- Stores subscriptions and cached data in a local SQLite database (`data.sqlite3`)
-- Posts are cached for 1 hour, comments for 30 minutes
-- Old data is automatically cleaned up every 6 hours
-- Theme preferences are persisted in the database
+```
+Space       toggle source
+a           enable all
+d           disable all
+Esc         back
+```
 
-## Tech Stack
+## Details
 
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) - TUI framework
-- [Lipgloss](https://github.com/charmbracelet/lipgloss) - Terminal styling
-- [Cobra](https://github.com/spf13/cobra) - CLI framework
-- [GORM](https://gorm.io/) - ORM for SQLite
-- SQLite - Local database
+- Stores everything in `data.sqlite3`
+- Caches posts for 1 hour
+- No login required
+
+## Contributing
+If you are interested in contributing to snoo, please feel free to submit a pull request or open an issue on our GitHub repository.
 
 ## License
+```
+MIT License
 
-Do whatever you want with it.
+Copyright (c) 2022
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## Thanks For Visiting
+Hope you liked it. Wanna support?
+
+- **[Star This Repository](https://github.com/snoofox/snoo)**
+- **[Buy Me A Coffee](https://www.buymeacoffee.com/shoto)**

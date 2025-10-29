@@ -24,7 +24,8 @@ func (p *Provider) Type() string {
 }
 
 func (p *Provider) FetchPosts(ctx context.Context, source feed.Source) ([]feed.Post, error) {
-	url := fmt.Sprintf("%s/r/%s.json", baseURL, source.Identifier)
+	subreddit, sort := parseIdentifier(source.Identifier)
+	url := fmt.Sprintf("%s/r/%s/%s.json", baseURL, subreddit, sort)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -152,7 +153,16 @@ func (p *Provider) FetchComments(ctx context.Context, post feed.Post) ([]feed.Co
 }
 
 func (p *Provider) ValidateSource(ctx context.Context, identifier string) (*feed.SourceMetadata, error) {
-	url := fmt.Sprintf("%s/r/%s/about.json", baseURL, identifier)
+	subreddit, sort := parseIdentifier(identifier)
+
+	validSorts := map[string]bool{
+		"hot": true, "new": true, "rising": true, "top": true, "best": true,
+	}
+	if !validSorts[sort] {
+		return nil, fmt.Errorf("invalid sort type: %s (use hot, new, rising, top, or best)", sort)
+	}
+
+	url := fmt.Sprintf("%s/r/%s/about.json", baseURL, subreddit)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -190,15 +200,32 @@ func (p *Provider) ValidateSource(ctx context.Context, identifier string) (*feed
 	desc, _ := data["public_description"].(string)
 	iconURL, _ := data["icon_img"].(string)
 
+	normalizedIdentifier := fmt.Sprintf("%s:%s", subreddit, sort)
+
 	return &feed.SourceMetadata{
-		Name:        displayName,
-		DisplayName: displayName,
+		Name:        normalizedIdentifier,
+		DisplayName: fmt.Sprintf("r/%s (%s)", displayName, sort),
 		Description: desc,
 		IconURL:     iconURL,
 	}, nil
 }
 
-func parsePost(data map[string]interface{}, subreddit string) feed.Post {
+func parseIdentifier(identifier string) (subreddit, sort string) {
+	subreddit = identifier
+	sort = "best"
+
+	for i := 0; i < len(identifier); i++ {
+		if identifier[i] == ':' {
+			subreddit = identifier[:i]
+			sort = identifier[i+1:]
+			break
+		}
+	}
+
+	return subreddit, sort
+}
+
+func parsePost(data map[string]any, identifier string) feed.Post {
 	id, _ := data["id"].(string)
 	title, _ := data["title"].(string)
 	author, _ := data["author"].(string)
@@ -217,11 +244,14 @@ func parsePost(data map[string]interface{}, subreddit string) feed.Post {
 		content = selftext
 	}
 
+	subreddit, sort := parseIdentifier(identifier)
+	sourceName := fmt.Sprintf("r/%s:%s", subreddit, sort)
+
 	return feed.Post{
 		ID:          id,
 		Title:       title,
 		Author:      author,
-		SourceName:  fmt.Sprintf("r/%s", subreddit),
+		SourceName:  sourceName,
 		SourceType:  "reddit",
 		Permalink:   permalink,
 		URL:         url,

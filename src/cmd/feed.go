@@ -40,22 +40,64 @@ type articleLoadedMsg struct {
 	err     error
 }
 
+type postKey struct {
+	typ string
+	id  string
+}
+
+type sortOption struct {
+	name string
+	key  string
+}
+
+var sortOptions = []sortOption{
+	{name: "Most Upvotes", key: "upvotes_desc"},
+	{name: "Least Upvotes", key: "upvotes_asc"},
+	{name: "Newest First", key: "newest"},
+	{name: "Oldest First", key: "oldest"},
+	{name: "Most Comments", key: "comments_desc"},
+	{name: "Least Comments", key: "comments_asc"},
+}
+
+type commentSortOption struct {
+	name string
+	key  string
+}
+
+var commentSortOptions = []commentSortOption{
+	{name: "Best (Highest Score)", key: "best"},
+	{name: "Worst (Lowest Score)", key: "worst"},
+	{name: "Newest First", key: "newest"},
+	{name: "Oldest First", key: "oldest"},
+}
+
 type model struct {
-	posts           []Post
-	cursor          int
-	viewing         bool
-	selected        int
-	width           int
-	height          int
-	comments        []Comment
-	loadingComments bool
-	loadingArticle  bool
-	ctx             context.Context
-	viewport        viewport.Model
-	ready           bool
-	originalContent string
-	articleContent  string
-	showingArticle  bool
+	posts              []Post
+	allPosts           []Post
+	cursor             int
+	viewing            bool
+	filtering          bool
+	sorting            bool
+	commentSorting     bool
+	filterCursor       int
+	sortCursor         int
+	commentSortCursor  int
+	selected           int
+	width              int
+	height             int
+	comments           []Comment
+	loadingComments    bool
+	loadingArticle     bool
+	ctx                context.Context
+	viewport           viewport.Model
+	ready              bool
+	sources            []string
+	sourceEnabled      map[string]bool
+	currentSort        string
+	currentCommentSort string
+	originalContent    string
+	articleContent     string
+	showingArticle     bool
 }
 
 func (m model) Init() tea.Cmd {
@@ -80,6 +122,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case commentsLoadedMsg:
 		m.comments = msg.comments
+		m.applyCommentSorting()
 		m.loadingComments = false
 		m.viewport.SetContent(m.renderPostContent())
 		m.viewport.GotoTop()
@@ -99,7 +142,88 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoTop()
 
 	case tea.KeyMsg:
-		if m.viewing {
+		if m.commentSorting {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.commentSorting = false
+				m.commentSortCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.commentSortCursor > 0 {
+					m.commentSortCursor--
+				}
+			case "down", "j":
+				if m.commentSortCursor < len(commentSortOptions)-1 {
+					m.commentSortCursor++
+				}
+			case "enter", " ":
+				m.currentCommentSort = commentSortOptions[m.commentSortCursor].key
+				m.applyCommentSorting()
+				m.commentSorting = false
+				m.commentSortCursor = 0
+				m.viewport.SetContent(m.renderPostContent())
+				m.viewport.GotoTop()
+				m.savePreferences()
+				return m, nil
+			}
+		} else if m.sorting {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.sorting = false
+				m.sortCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.sortCursor > 0 {
+					m.sortCursor--
+				}
+			case "down", "j":
+				if m.sortCursor < len(sortOptions)-1 {
+					m.sortCursor++
+				}
+			case "enter", " ":
+				m.currentSort = sortOptions[m.sortCursor].key
+				m.applySorting()
+				m.sorting = false
+				m.sortCursor = 0
+				m.savePreferences()
+				return m, nil
+			}
+		} else if m.filtering {
+			switch msg.String() {
+			case "q", "esc", "backspace":
+				m.filtering = false
+				m.filterCursor = 0
+				return m, nil
+			case "up", "k":
+				if m.filterCursor > 0 {
+					m.filterCursor--
+				}
+			case "down", "j":
+				if m.filterCursor < len(m.sources)-1 {
+					m.filterCursor++
+				}
+			case "enter", " ":
+				source := m.sources[m.filterCursor]
+				m.sourceEnabled[source] = !m.sourceEnabled[source]
+				m.applyFilters()
+				m.savePreferences()
+				return m, nil
+			case "a":
+				for _, source := range m.sources {
+					m.sourceEnabled[source] = true
+				}
+				m.applyFilters()
+				m.savePreferences()
+				return m, nil
+			case "d":
+				for _, source := range m.sources {
+					m.sourceEnabled[source] = false
+				}
+				m.applyFilters()
+				m.savePreferences()
+				return m, nil
+			}
+		} else if m.viewing {
 			switch msg.String() {
 			case "q", "esc", "backspace":
 				m.viewing = false
@@ -110,6 +234,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.articleContent = ""
 				m.showingArticle = false
 				return m, nil
+			case "s":
+				if len(m.comments) > 0 {
+					m.commentSorting = true
+					m.commentSortCursor = 0
+					return m, nil
+				}
 			case "r":
 				if !m.loadingArticle {
 					post := m.posts[m.selected]
@@ -140,6 +270,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "q", "ctrl+c":
 				return m, tea.Quit
+			case "f":
+				m.filtering = true
+				m.filterCursor = 0
+				return m, nil
+			case "s":
+				m.sorting = true
+				m.sortCursor = 0
+				return m, nil
 			case "up", "k":
 				if m.cursor > 0 {
 					m.cursor--
@@ -171,11 +309,294 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *model) applyFilters() {
+	m.posts = m.posts[:0]
+	for i := range m.allPosts {
+		if m.sourceEnabled[m.allPosts[i].SourceName] {
+			m.posts = append(m.posts, m.allPosts[i])
+		}
+	}
+	m.applySorting()
+	if m.cursor >= len(m.posts) {
+		m.cursor = len(m.posts) - 1
+		if m.cursor < 0 {
+			m.cursor = 0
+		}
+	}
+}
+
+func (m *model) applySorting() {
+	switch m.currentSort {
+	case "upvotes_desc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].Score > m.posts[j].Score
+		})
+	case "upvotes_asc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].Score < m.posts[j].Score
+		})
+	case "newest":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].CreatedUTC > m.posts[j].CreatedUTC
+		})
+	case "oldest":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].CreatedUTC < m.posts[j].CreatedUTC
+		})
+	case "comments_desc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].NumComments > m.posts[j].NumComments
+		})
+	case "comments_asc":
+		sort.Slice(m.posts, func(i, j int) bool {
+			return m.posts[i].NumComments < m.posts[j].NumComments
+		})
+	default:
+		// Default: smart sort (upvotes if available, otherwise newest)
+		sort.Slice(m.posts, func(i, j int) bool {
+			if m.posts[i].Score > 0 && m.posts[j].Score > 0 {
+				return m.posts[i].Score > m.posts[j].Score
+			}
+			return m.posts[i].CreatedUTC > m.posts[j].CreatedUTC
+		})
+	}
+}
+
+func (m *model) applyCommentSorting() {
+	m.comments = sortComments(m.comments, m.currentCommentSort)
+}
+
+func sortComments(comments []Comment, sortKey string) []Comment {
+	if len(comments) == 0 {
+		return comments
+	}
+
+	sorted := make([]Comment, len(comments))
+	copy(sorted, comments)
+
+	switch sortKey {
+	case "best":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Score > sorted[j].Score
+		})
+	case "worst":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].Score < sorted[j].Score
+		})
+	case "newest":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].CreatedAt > sorted[j].CreatedAt
+		})
+	case "oldest":
+		sort.Slice(sorted, func(i, j int) bool {
+			return sorted[i].CreatedAt < sorted[j].CreatedAt
+		})
+	}
+
+	for i := range sorted {
+		if len(sorted[i].Replies) > 0 {
+			sorted[i].Replies = sortComments(sorted[i].Replies, sortKey)
+		}
+	}
+
+	return sorted
+}
+
+func (m *model) savePreferences() {
+	database := db.FromContext(m.ctx)
+	if database == nil {
+		return
+	}
+
+	if m.currentSort != "" {
+		db.SetSetting(database, "feed_sort", m.currentSort)
+	}
+
+	if m.currentCommentSort != "" {
+		db.SetSetting(database, "comment_sort", m.currentCommentSort)
+	}
+
+	var enabledSources []string
+	for _, src := range m.sources {
+		if m.sourceEnabled[src] {
+			enabledSources = append(enabledSources, src)
+		}
+	}
+	if len(enabledSources) > 0 {
+		db.SetSetting(database, "feed_sources", strings.Join(enabledSources, ","))
+	}
+}
+
+func loadPreferences(ctx context.Context, sources []string) (string, string, map[string]bool) {
+	database := db.FromContext(ctx)
+	sourceEnabled := make(map[string]bool, len(sources))
+
+	for _, src := range sources {
+		sourceEnabled[src] = true
+	}
+
+	if database == nil {
+		return "upvotes_desc", "best", sourceEnabled
+	}
+
+	sortPref, err := db.GetSetting(database, "feed_sort")
+	if err != nil || sortPref == "" {
+		sortPref = "upvotes_desc"
+	}
+
+	commentSortPref, err := db.GetSetting(database, "comment_sort")
+	if err != nil || commentSortPref == "" {
+		commentSortPref = "best"
+	}
+
+	sourcesStr, err := db.GetSetting(database, "feed_sources")
+	if err == nil && sourcesStr != "" {
+		enabledList := strings.Split(sourcesStr, ",")
+		for _, src := range sources {
+			sourceEnabled[src] = false
+		}
+		for _, enabled := range enabledList {
+			if _, exists := sourceEnabled[enabled]; exists {
+				sourceEnabled[enabled] = true
+			}
+		}
+	}
+
+	return sortPref, commentSortPref, sourceEnabled
+}
+
 func (m model) View() string {
+	if m.commentSorting {
+		return m.viewCommentSort()
+	}
+	if m.sorting {
+		return m.viewSort()
+	}
+	if m.filtering {
+		return m.viewFilter()
+	}
 	if m.viewing {
 		return m.viewPost()
 	}
 	return m.viewList()
+}
+
+func (m model) viewCommentSort() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Sort Comments"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Choose comment sorting order"))
+	b.WriteString("\n\n")
+
+	for i, opt := range commentSortOptions {
+		indicator := " "
+		if opt.key == m.currentCommentSort {
+			indicator = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", indicator, opt.name)
+		if i == m.commentSortCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("enter"))
+	b.WriteString(dimStyle.Render(" select  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
+}
+
+func (m model) viewSort() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Sort Posts"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Choose sorting order"))
+	b.WriteString("\n\n")
+
+	for i, opt := range sortOptions {
+		indicator := " "
+		if opt.key == m.currentSort {
+			indicator = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", indicator, opt.name)
+		if i == m.sortCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("enter"))
+	b.WriteString(dimStyle.Render(" select  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
+}
+
+func (m model) viewFilter() string {
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(titleStyle.Render("  Filter Sources"))
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  Toggle sources on/off"))
+	b.WriteString("\n\n")
+
+	for i, src := range m.sources {
+		box := "○"
+		if m.sourceEnabled[src] {
+			box = "●"
+		}
+
+		line := fmt.Sprintf("  %s %s", box, src)
+		if i == m.filterCursor {
+			b.WriteString(cursorStyle.Render("● "))
+			b.WriteString(selectedStyle.Render(line))
+		} else {
+			b.WriteString("  ")
+			b.WriteString(line)
+		}
+		b.WriteString("\n")
+	}
+
+	t := GetCurrentTheme()
+	b.WriteString("\n")
+	b.WriteString(dimStyle.Render("  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpNav).Render("j/k"))
+	b.WriteString(dimStyle.Render(" navigate  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("space"))
+	b.WriteString(dimStyle.Render(" toggle  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("a"))
+	b.WriteString(dimStyle.Render(" all  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpAction).Render("d"))
+	b.WriteString(dimStyle.Render(" none  "))
+	b.WriteString(lipgloss.NewStyle().Foreground(t.HelpQuit).Render("esc"))
+	b.WriteString(dimStyle.Render(" back"))
+
+	return b.String()
 }
 
 func (m model) viewList() string {
@@ -274,6 +695,10 @@ func (m model) viewList() string {
 		dimStyle.Render(" navigate  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("enter") +
 		dimStyle.Render(" read  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("f") +
+		dimStyle.Render(" filter  ") +
+		lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s") +
+		dimStyle.Render(" sort  ") +
 		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("q") +
 		dimStyle.Render(" quit")
 	return s + helpText
@@ -395,6 +820,9 @@ func (m model) viewPost() string {
 			helpText += " • r: read article"
 		}
 	}
+	if len(m.comments) > 0 {
+		helpText += " • s: sort comments"
+	}
 	helpText += " • esc/backspace: back • q: quit"
 	return m.viewport.View() + "\n" + dimStyle.Render(helpText)
 }
@@ -413,41 +841,40 @@ func getThreadColor(depth int) lipgloss.Color {
 	return lipgloss.Color(colors[depth%len(colors)])
 }
 
-func renderComment(comment Comment, maxWidth int) string {
-	var s strings.Builder
+func renderComment(c Comment, w int) string {
+	var b strings.Builder
 
-	metaStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C6C6C"))
+	meta := lipgloss.NewStyle().Foreground(lipgloss.Color("#6C6C6C"))
 
-	indent := ""
-	for i := 0; i < comment.Depth; i++ {
-		color := getThreadColor(i)
-		style := lipgloss.NewStyle().Foreground(color)
-		indent += style.Render("│ ")
+	var indent strings.Builder
+	for i := 0; i < c.Depth; i++ {
+		indent.WriteString(lipgloss.NewStyle().Foreground(getThreadColor(i)).Render("│ "))
+	}
+	ind := indent.String()
+
+	b.WriteString(ind)
+	b.WriteString(meta.Render(c.Author))
+	b.WriteString(" ")
+	b.WriteString(meta.Render(fmt.Sprintf("↑%d", c.Score)))
+	b.WriteString("\n")
+
+	body := renderMarkdown(c.Body, w-(c.Depth*2))
+	lines := strings.SplitSeq(body, "\n")
+	for line := range lines {
+		b.WriteString(ind)
+		b.WriteString(line)
+		b.WriteString("\n")
 	}
 
-	s.WriteString(indent)
-	s.WriteString(metaStyle.Render(comment.Author))
-	s.WriteString(" ")
-	s.WriteString(metaStyle.Render(fmt.Sprintf("↑%d", comment.Score)))
-	s.WriteString("\n")
-
-	rendered := renderMarkdown(comment.Body, maxWidth-(comment.Depth*2))
-	bodyLines := strings.SplitSeq(rendered, "\n")
-	for line := range bodyLines {
-		s.WriteString(indent)
-		s.WriteString(line)
-		s.WriteString("\n")
-	}
-
-	if len(comment.Replies) > 0 {
-		for _, reply := range comment.Replies {
-			s.WriteString(renderComment(reply, maxWidth))
+	if len(c.Replies) > 0 {
+		for i := range c.Replies {
+			b.WriteString(renderComment(c.Replies[i], w))
 		}
-	} else if comment.Depth == 0 {
-		s.WriteString("\n")
+	} else if c.Depth == 0 {
+		b.WriteString("\n")
 	}
 
-	return s.String()
+	return b.String()
 }
 
 var feedCmd = &cobra.Command{
@@ -491,14 +918,42 @@ var feedCmd = &cobra.Command{
 			}
 		}
 
-		sort.Slice(posts, func(i, j int) bool {
-			if posts[i].Score > 0 && posts[j].Score > 0 {
-				return posts[i].Score > posts[j].Score
+		seen := make(map[postKey]bool, len(posts))
+		deduped := make([]Post, 0, len(posts))
+		for i := range posts {
+			k := postKey{posts[i].SourceType, posts[i].ID}
+			if !seen[k] {
+				seen[k] = true
+				deduped = append(deduped, posts[i])
 			}
-			return posts[i].CreatedUTC > posts[j].CreatedUTC
-		})
+		}
+		posts = deduped
 
-		p := tea.NewProgram(model{posts: posts, ctx: cmd.Context()}, tea.WithAltScreen())
+		srcSet := make(map[string]bool, 10)
+		for i := range posts {
+			srcSet[posts[i].SourceName] = true
+		}
+		srcs := make([]string, 0, len(srcSet))
+		for src := range srcSet {
+			srcs = append(srcs, src)
+		}
+		sort.Strings(srcs)
+
+		sortPref, commentSortPref, srcEnabled := loadPreferences(cmd.Context(), srcs)
+
+		m := model{
+			posts:              posts,
+			allPosts:           posts,
+			ctx:                cmd.Context(),
+			sources:            srcs,
+			sourceEnabled:      srcEnabled,
+			currentSort:        sortPref,
+			currentCommentSort: commentSortPref,
+		}
+
+		m.applyFilters()
+
+		p := tea.NewProgram(m, tea.WithAltScreen())
 		if _, err := p.Run(); err != nil {
 			fmt.Printf("Error: %v", err)
 		}
@@ -506,7 +961,6 @@ var feedCmd = &cobra.Command{
 }
 
 func truncate(s string, maxLen int) string {
-	// Decode HTML entities first
 	s = html.UnescapeString(s)
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len(s) <= maxLen {
@@ -516,7 +970,6 @@ func truncate(s string, maxLen int) string {
 }
 
 func wrapText(text string, width int) string {
-	// Decode HTML entities first
 	text = html.UnescapeString(text)
 
 	if width <= 0 {
@@ -565,7 +1018,6 @@ func renderMarkdown(text string, width int) string {
 		return ""
 	}
 
-	// Decode HTML entities like &amp; -> &, &lt; -> <, etc.
 	text = html.UnescapeString(text)
 
 	r, err := glamour.NewTermRenderer(
