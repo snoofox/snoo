@@ -808,23 +808,43 @@ func (m model) renderPostContent() string {
 
 func (m model) viewPost() string {
 	post := m.posts[m.selected]
-	helpText := "j/k or ↑/↓: scroll"
+	theme := GetCurrentTheme()
+
+	var helpParts []string
+	helpParts = append(helpParts,
+		lipgloss.NewStyle().Foreground(theme.HelpNav).Render("j/k")+
+			dimStyle.Render(" scroll"))
+
 	if post.URL != "" && !m.loadingArticle {
 		if m.articleContent != "" {
 			if m.showingArticle {
-				helpText += " • r: show original"
+				helpParts = append(helpParts,
+					lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+						dimStyle.Render(" show original"))
 			} else {
-				helpText += " • r: show article"
+				helpParts = append(helpParts,
+					lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+						dimStyle.Render(" show article"))
 			}
 		} else {
-			helpText += " • r: read article"
+			helpParts = append(helpParts,
+				lipgloss.NewStyle().Foreground(theme.HelpAction).Render("r")+
+					dimStyle.Render(" read article"))
 		}
 	}
+
 	if len(m.comments) > 0 {
-		helpText += " • s: sort comments"
+		helpParts = append(helpParts,
+			lipgloss.NewStyle().Foreground(theme.HelpAction).Render("s")+
+				dimStyle.Render(" sort"))
 	}
-	helpText += " • esc/backspace: back • q: quit"
-	return m.viewport.View() + "\n" + dimStyle.Render(helpText)
+
+	helpParts = append(helpParts,
+		lipgloss.NewStyle().Foreground(theme.HelpQuit).Render("esc")+
+			dimStyle.Render(" back"))
+
+	helpText := dimStyle.Render("  ") + strings.Join(helpParts, dimStyle.Render("  "))
+	return m.viewport.View() + "\n" + helpText
 }
 
 func getThreadColor(depth int) lipgloss.Color {
