@@ -302,6 +302,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.showingArticle = false
 				m.viewport.SetContent(m.renderPostContent())
 				m.viewport.GotoTop()
+
+				post := m.posts[m.selected]
+				if !post.IsRead {
+					m.posts[m.selected].IsRead = true
+					go m.markPostAsRead(post)
+				}
+
 				return m, m.loadCommentsCmd()
 			}
 		}
@@ -686,7 +693,12 @@ func (m model) viewList() string {
 				metadata += commentsStyle.Render(fmt.Sprintf("󰆉 %d", post.NumComments))
 			}
 
-			s += "   " + lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB")).Render(titleText) + "\n"
+			titleStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E7EB"))
+			if post.IsRead {
+				titleStyle = dimStyle
+			}
+
+			s += "   " + titleStyle.Render(titleText) + "\n"
 			if metadata != "" {
 				s += "   " + nsfw + sub + " " + sep + " " + metadata + "\n\n"
 			} else {
@@ -749,6 +761,18 @@ func (m model) loadArticleCmd() tea.Cmd {
 	}
 }
 
+func (m *model) markPostAsRead(post Post) {
+	database := db.FromContext(m.ctx)
+	if database == nil {
+		return
+	}
+
+	manager := feed.NewManager(database)
+	if err := manager.MarkAsRead(m.ctx, post.SourceType, post.ID); err != nil {
+		debug.Log("Failed to mark post as read: %v", err)
+	}
+}
+
 func convertComment(c feed.Comment) Comment {
 	replies := make([]Comment, len(c.Replies))
 	for i, r := range c.Replies {
@@ -777,11 +801,9 @@ func (m model) renderPostContent() string {
 	if m.loadingArticle {
 		s += dimStyle.Render("Loading article...") + "\n"
 	} else if m.showingArticle && m.articleContent != "" {
-		// Show fetched article content
 		rendered := renderMarkdown(m.articleContent, maxWidth)
 		s += rendered + "\n"
 	} else if post.Content != "" || m.originalContent != "" {
-		// Show original content (either from post or saved original)
 		content := post.Content
 		if m.originalContent != "" {
 			content = m.originalContent
@@ -941,6 +963,7 @@ var feedCmd = &cobra.Command{
 				Content:     p.Content,
 				Thumbnail:   p.Thumbnail,
 				NSFW:        p.NSFW,
+				IsRead:      p.ReadAt != nil,
 			}
 		}
 

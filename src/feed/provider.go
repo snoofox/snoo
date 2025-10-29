@@ -46,6 +46,7 @@ type Post struct {
 	Content     string
 	Thumbnail   string
 	NSFW        bool
+	ReadAt      *time.Time
 }
 
 type Comment struct {
