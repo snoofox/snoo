@@ -643,7 +643,7 @@ func (m model) viewList() string {
 			if post.NSFW {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
-			sub := subredditStyle.Render(post.SourceName)
+			sub := subredditStyle.Render(displaySourceName(post.SourceName))
 
 			metadata := ""
 			sep := separatorStyle.Render("•")
@@ -670,7 +670,7 @@ func (m model) viewList() string {
 			if post.NSFW {
 				nsfw = nsfwStyle.Render(" NSFW ") + " "
 			}
-			sub := subredditStyle.Render(post.SourceName)
+			sub := subredditStyle.Render(displaySourceName(post.SourceName))
 
 			metadata := ""
 			sep := separatorStyle.Render("•")
@@ -993,6 +993,16 @@ func truncate(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-3] + "..."
+}
+
+func displaySourceName(sourceName string) string {
+	if idx := strings.LastIndex(sourceName, ":"); idx != -1 {
+		sourceName = sourceName[:idx]
+	}
+	if idx := strings.LastIndex(sourceName, "/"); idx != -1 {
+		sourceName = sourceName[:idx]
+	}
+	return sourceName
 }
 
 func wrapText(text string, width int) string {
