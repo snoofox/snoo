@@ -14,6 +14,7 @@ type Post struct {
 	Content     string
 	Thumbnail   string
 	NSFW        bool
+	IsRead      bool
 }
 
 type Comment struct {
