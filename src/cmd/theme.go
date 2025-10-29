@@ -6,6 +6,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/snoofox/snoo/src/db"
 	"github.com/spf13/cobra"
+	"gorm.io/gorm"
 )
 
 type Theme struct {
@@ -136,6 +137,20 @@ func GetCurrentThemeName() string {
 	return currentTheme
 }
 
+func LoadThemeFromDB(gormDB *gorm.DB) {
+	if gormDB == nil {
+		return
+	}
+
+	savedTheme, err := db.GetSetting(gormDB, "theme")
+	if err == nil && savedTheme != "" {
+		if _, ok := themes[savedTheme]; ok {
+			currentTheme = savedTheme
+			applyTheme()
+		}
+	}
+}
+
 func GetThemeNames() []string {
 	names := make([]string, 0, len(themes))
 	for name := range themes {
@@ -189,6 +204,17 @@ var themeCmd = &cobra.Command{
 	Short: "Change the color theme",
 	Long:  "Change the color theme for the feed viewer. Available themes: default, catppuccin, dracula, github, peppermint",
 	Run: func(cmd *cobra.Command, args []string) {
+		// Load current theme from database first
+		gormDB := db.FromContext(cmd.Context())
+		if gormDB != nil {
+			savedTheme, err := db.GetSetting(gormDB, "theme")
+			if err == nil && savedTheme != "" {
+				if _, ok := themes[savedTheme]; ok {
+					currentTheme = savedTheme
+				}
+			}
+		}
+
 		if len(args) == 0 {
 			listThemes()
 			return
