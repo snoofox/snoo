@@ -1,0 +1,47 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Build binaries
+      run: |
+        # Windows
+        GOOS=windows GOARCH=amd64 go build -o snoo-windows-amd64.exe .
+        GOOS=windows GOARCH=386 go build -o snoo-windows-386.exe .
+        
+        # Linux
+        GOOS=linux GOARCH=amd64 go build -o snoo-linux-amd64 .
+        GOOS=linux GOARCH=386 go build -o snoo-linux-386 .
+        GOOS=linux GOARCH=arm64 go build -o snoo-linux-arm64 .
+        
+        # macOS
+        GOOS=darwin GOARCH=amd64 go build -o snoo-darwin-amd64 .
+        GOOS=darwin GOARCH=arm64 go build -o snoo-darwin-arm64 .
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          snoo-windows-amd64.exe
+          snoo-windows-386.exe
+          snoo-linux-amd64
+          snoo-linux-386
+          snoo-linux-arm64
+          snoo-darwin-amd64
+          snoo-darwin-arm64
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
