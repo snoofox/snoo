@@ -3,17 +3,36 @@ package debug
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
 var logFile *os.File
 
 func init() {
-	var err error
-	logFile, err = os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	logPath, err := getLogPath()
 	if err != nil {
 		return
 	}
+
+	logFile, err = os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return
+	}
+}
+
+func getLogPath() (string, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+
+	snooDir := filepath.Join(homeDir, ".snoo")
+	if err := os.MkdirAll(snooDir, 0755); err != nil {
+		return "", err
+	}
+
+	return filepath.Join(snooDir, "debug.log"), nil
 }
 
 func Log(format string, args ...interface{}) {
